@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class InterventionRequestDto {
+public class InterventionRequestDto implements RequestDto {
     private Long id;
     private LocalDateTime datePlanifiee;
     private String statut;

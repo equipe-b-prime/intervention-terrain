@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class InterventionResponseDto {
+public class InterventionResponseDto implements ResponseDto {
     private Long id;
     private LocalDateTime datePlanifiee;
     private String statut;

@@ -10,7 +10,7 @@ import lombok.*;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class CompetenceResponseDto {
+public class CompetenceResponseDto implements ResponseDto {
     private Long id;
     private String nom;
     private String description;

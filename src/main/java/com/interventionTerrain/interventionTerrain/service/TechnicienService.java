@@ -7,12 +7,12 @@ import com.interventionTerrain.interventionTerrain.entity.Competence;
 import com.interventionTerrain.interventionTerrain.entity.Equipe;
 import com.interventionTerrain.interventionTerrain.repository.EquipeRepository;
 import com.interventionTerrain.interventionTerrain.dto.EquipeResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.RequestDto;
+import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienResponseDto;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienCompetenceRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import com.interventionTerrain.interventionTerrain.entity.Technicien;
@@ -20,24 +20,59 @@ import com.interventionTerrain.interventionTerrain.repository.TechnicienReposito
 
 /**
  * Service métier gérant les techniciens.
- * Fournit les opérations CRUD ainsi que les conversions entité/DTO.
+ * Fournit la création, la modification et les conversions entité/DTO.
+ * La lecture et la suppression sont héritées de {@link AbstractCrudService}.
  */
 @Service
-@RequiredArgsConstructor
-public class TechnicienService {
+public class TechnicienService extends AbstractCrudService {
 
     private final TechnicienRepository technicienRepository;
     private final EquipeRepository equipeRepository;
     private final TechnicienCompetenceRepository technicienCompetenceRepository;
 
+    /**
+     * Constructeur injectant les repositories du technicien.
+     *
+     * @param technicienRepository le repository des techniciens
+     * @param equipeRepository le repository des équipes (résolution de la FK)
+     * @param technicienCompetenceRepository le repository de l'association technicien/compétence
+     */
+    public TechnicienService(TechnicienRepository technicienRepository,
+                             EquipeRepository equipeRepository,
+                             TechnicienCompetenceRepository technicienCompetenceRepository) {
+        super(technicienRepository);
+        this.technicienRepository = technicienRepository;
+        this.equipeRepository = equipeRepository;
+        this.technicienCompetenceRepository = technicienCompetenceRepository;
+    }
+
+    /**
+     * Convertit les données d'une requête en entité technicien.
+     *
+     * @param technicienRequest Les données de la requête pour créer le technicien.
+     * @param equipe L'équipe associée au technicien.
+     * @return Technicien L'entité technicien créée.
+     */
+    public Technicien toEntity(TechnicienRequestDto technicienRequest, Equipe equipe) {
+        return Technicien.builder()
+                .nom(technicienRequest.getNom())
+                .prenom(technicienRequest.getPrenom())
+                .email(technicienRequest.getEmail())
+                .telephone(technicienRequest.getTelephone())
+                .matricule(technicienRequest.getMatricule())
+                .equipe(equipe)
+                .build();
+    }
 
     /**
      * Convertit une entité technicien en objet de réponse.
      *
-     * @param technicien L'entité technicien à convertir.
-     * @return TechnicienResponseDto Les détails du technicien converti.
+     * @param entity L'entité technicien à convertir.
+     * @return ResponseDto Les détails du technicien converti.
      */
-    public TechnicienResponseDto toDto(Technicien technicien) {
+    @Override
+    public ResponseDto toDto(Object entity) {
+        Technicien technicien = (Technicien) entity;
         return TechnicienResponseDto.builder()
                 .id(technicien.getId())
                 .nom(technicien.getNom())
@@ -64,66 +99,29 @@ public class TechnicienService {
     }
 
     /**
-     * Convertit les données d'une requête en entité technicien.
-     *
-     * @param technicienRequest Les données de la requête pour créer le technicien.
-     * @param equipe L'équipe associée au technicien.
-     * @return Technicien L'entité technicien créée.
-     */
-    public Technicien toEntity(TechnicienRequestDto technicienRequest, Equipe equipe) {
-        return Technicien.builder()
-                .nom(technicienRequest.getNom())
-                .prenom(technicienRequest.getPrenom())
-                .email(technicienRequest.getEmail())
-                .telephone(technicienRequest.getTelephone())
-                .matricule(technicienRequest.getMatricule())
-                .equipe(equipe)
-                .build();
-    }
-
-    /**
      * Crée un nouveau technicien.
      *
-     * @param technicienRequest les informations du technicien à créer
+     * @param requestDto les informations du technicien à créer
      * @return le technicien créé
      */
-    public TechnicienResponseDto createTechnicien(TechnicienRequestDto technicienRequest) {
+    @Override
+    public ResponseDto create(RequestDto requestDto) {
+        TechnicienRequestDto technicienRequest = (TechnicienRequestDto) requestDto;
         Equipe equipe = equipeRepository.findById(technicienRequest.getEquipeId())
                 .orElseThrow(() -> new RuntimeException("Équipe non trouvée"));
         return toDto(technicienRepository.save(toEntity(technicienRequest, equipe)));
     }
 
     /**
-     * Récupère un technicien à partir de son identifiant.
-     *
-     * @param id L'identifiant du technicien à récupérer.
-     * @return TechnicienResponseDto Les détails du technicien récupéré.
-     */
-    public TechnicienResponseDto getTechnicienById(Long id) {
-        Technicien technicien = technicienRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Technicien non trouvé"));
-        return toDto(technicien);
-    }
-
-    /**
-     * Récupère la liste de tous les techniciens.
-     *
-     * @return List<TechnicienResponseDto> La liste des techniciens récupérés.
-     */
-    public List<TechnicienResponseDto> getAllTechniciens() {
-        return technicienRepository.findAll().stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    /**
      * Modifie un technicien existant.
      *
      * @param id L'identifiant du technicien à modifier.
-     * @param technicienRequest Les données de la requête pour modifier le technicien.
-     * @return TechnicienResponseDto Les détails du technicien modifié.
+     * @param requestDto Les données de la requête pour modifier le technicien.
+     * @return ResponseDto Les détails du technicien modifié.
      */
-    public TechnicienResponseDto updateTechnicienById(Long id, TechnicienRequestDto technicienRequest) {
+    @Override
+    public ResponseDto update(Long id, RequestDto requestDto) {
+        TechnicienRequestDto technicienRequest = (TechnicienRequestDto) requestDto;
         Technicien technicien = technicienRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Technicien non trouvé"));
         Equipe equipe = equipeRepository.findById(technicienRequest.getEquipeId())
@@ -138,19 +136,6 @@ public class TechnicienService {
     }
 
     /**
-     * Supprime un technicien à partir de son identifiant.
-     *
-     * @param id L'identifiant du technicien à supprimer.
-     * @return TechnicienResponseDto Les détails du technicien supprimé.
-     */
-    public TechnicienResponseDto deleteTechnicienById(Long id) {
-        Technicien technicien = technicienRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Technicien non trouvé"));
-        technicienRepository.deleteById(id);
-        return toDto(technicien);
-    }
-
-    /**
      * Récupère les techniciens d'une agence (requête personnalisée avec jointure).
      *
      * @param agenceId L'identifiant de l'agence.
@@ -159,6 +144,7 @@ public class TechnicienService {
     public List<TechnicienResponseDto> getTechniciensByAgence(Long agenceId) {
         return technicienRepository.findByAgenceId(agenceId).stream()
                 .map(this::toDto)
+                .map(TechnicienResponseDto.class::cast)
                 .toList();
     }
 

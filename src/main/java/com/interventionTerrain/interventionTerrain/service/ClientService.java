@@ -2,38 +2,31 @@ package com.interventionTerrain.interventionTerrain.service;
 
 import com.interventionTerrain.interventionTerrain.dto.ClientRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.ClientResponseDto;
-import lombok.RequiredArgsConstructor;
+import com.interventionTerrain.interventionTerrain.dto.RequestDto;
+import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import com.interventionTerrain.interventionTerrain.entity.Client;
 import com.interventionTerrain.interventionTerrain.repository.ClientRepository;
 
 /**
  * Service métier gérant les clients.
- * Fournit les opérations CRUD ainsi que les conversions entité/DTO.
+ * Fournit la création, la modification et les conversions entité/DTO.
+ * La lecture et la suppression sont héritées de {@link AbstractCrudService}.
  */
 @Service
-@RequiredArgsConstructor
-public class ClientService {
+public class ClientService extends AbstractCrudService {
 
     private final ClientRepository clientRepository;
 
     /**
-     * Convertit une entité client en objet de réponse.
+     * Constructeur injectant le repository des clients.
      *
-     * @param client L'entité client à convertir.
-     * @return ClientResponseDto Les détails du client converti.
+     * @param clientRepository le repository des clients
      */
-    public ClientResponseDto toDto(Client client) {
-        return ClientResponseDto.builder()
-                .id(client.getId())
-                .nom(client.getNom())
-                .prenom(client.getPrenom())
-                .email(client.getEmail())
-                .telephone(client.getTelephone())
-                .adresse(client.getAdresse())
-                .build();
+    public ClientService(ClientRepository clientRepository) {
+        super(clientRepository);
+        this.clientRepository = clientRepository;
     }
 
     /**
@@ -53,46 +46,46 @@ public class ClientService {
     }
 
     /**
+     * Convertit une entité client en objet de réponse.
+     *
+     * @param entity L'entité client à convertir.
+     * @return ResponseDto Les détails du client converti.
+     */
+    @Override
+    public ResponseDto toDto(Object entity) {
+        Client client = (Client) entity;
+        return ClientResponseDto.builder()
+                .id(client.getId())
+                .nom(client.getNom())
+                .prenom(client.getPrenom())
+                .email(client.getEmail())
+                .telephone(client.getTelephone())
+                .adresse(client.getAdresse())
+                .build();
+    }
+
+    /**
      * Crée un nouveau client.
      *
-     * @param clientRequest les informations du client à créer
+     * @param requestDto les informations du client à créer
      * @return le client créé
      */
-    public ClientResponseDto createClient(ClientRequestDto clientRequest) {
+    @Override
+    public ResponseDto create(RequestDto requestDto) {
+        ClientRequestDto clientRequest = (ClientRequestDto) requestDto;
         return toDto(clientRepository.save(toEntity(clientRequest)));
-    }
-
-    /**
-     * Récupère un client à partir de son identifiant.
-     *
-     * @param id L'identifiant du client à récupérer.
-     * @return ClientResponseDto Les détails du client récupéré.
-     */
-    public ClientResponseDto getClientById(Long id) {
-        Client client = clientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Client non trouvé"));
-        return toDto(client);
-    }
-
-    /**
-     * Récupère la liste de tous les clients.
-     *
-     * @return List<ClientResponseDto> La liste des clients récupérés.
-     */
-    public List<ClientResponseDto> getAllClients() {
-        return clientRepository.findAll().stream()
-                .map(this::toDto)
-                .toList();
     }
 
     /**
      * Modifie un client existant.
      *
      * @param id L'identifiant du client à modifier.
-     * @param clientRequest Les données de la requête pour modifier le client.
-     * @return ClientResponseDto Les détails du client modifié.
+     * @param requestDto Les données de la requête pour modifier le client.
+     * @return ResponseDto Les détails du client modifié.
      */
-    public ClientResponseDto updateClientById(Long id, ClientRequestDto clientRequest) {
+    @Override
+    public ResponseDto update(Long id, RequestDto requestDto) {
+        ClientRequestDto clientRequest = (ClientRequestDto) requestDto;
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Client non trouvé"));
         client.setNom(clientRequest.getNom());
@@ -101,18 +94,5 @@ public class ClientService {
         client.setTelephone(clientRequest.getTelephone());
         client.setAdresse(clientRequest.getAdresse());
         return toDto(clientRepository.save(client));
-    }
-
-    /**
-     * Supprime un client à partir de son identifiant.
-     *
-     * @param id L'identifiant du client à supprimer.
-     * @return ClientResponseDto Les détails du client supprimé.
-     */
-    public ClientResponseDto deleteClientById(Long id) {
-        Client client = clientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Client non trouvé"));
-        clientRepository.deleteById(id);
-        return toDto(client);
     }
 }

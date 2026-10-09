@@ -2,35 +2,31 @@ package com.interventionTerrain.interventionTerrain.service;
 
 import com.interventionTerrain.interventionTerrain.dto.CompetenceRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.CompetenceResponseDto;
-import lombok.RequiredArgsConstructor;
+import com.interventionTerrain.interventionTerrain.dto.RequestDto;
+import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import com.interventionTerrain.interventionTerrain.entity.Competence;
 import com.interventionTerrain.interventionTerrain.repository.CompetenceRepository;
 
 /**
  * Service métier gérant les compétences.
- * Fournit les opérations CRUD ainsi que les conversions entité/DTO.
+ * Fournit la création, la modification et les conversions entité/DTO.
+ * La lecture et la suppression sont héritées de {@link AbstractCrudService}.
  */
 @Service
-@RequiredArgsConstructor
-public class CompetenceService {
+public class CompetenceService extends AbstractCrudService {
 
     private final CompetenceRepository competenceRepository;
 
     /**
-     * Convertit une entité compétence en objet de réponse.
+     * Constructeur injectant le repository des compétences.
      *
-     * @param competence L'entité compétence à convertir.
-     * @return CompetenceResponseDto Les détails de la compétence convertie.
+     * @param competenceRepository le repository des compétences
      */
-    public CompetenceResponseDto toDto(Competence competence) {
-        return CompetenceResponseDto.builder()
-                .id(competence.getId())
-                .nom(competence.getNom())
-                .description(competence.getDescription())
-                .build();
+    public CompetenceService(CompetenceRepository competenceRepository) {
+        super(competenceRepository);
+        this.competenceRepository = competenceRepository;
     }
 
     /**
@@ -47,63 +43,47 @@ public class CompetenceService {
     }
 
     /**
+     * Convertit une entité compétence en objet de réponse.
+     *
+     * @param entity L'entité compétence à convertir.
+     * @return ResponseDto Les détails de la compétence convertie.
+     */
+    @Override
+    public ResponseDto toDto(Object entity) {
+        Competence competence = (Competence) entity;
+        return CompetenceResponseDto.builder()
+                .id(competence.getId())
+                .nom(competence.getNom())
+                .description(competence.getDescription())
+                .build();
+    }
+
+    /**
      * Crée une nouvelle compétence.
      *
-     * @param competenceRequest les informations de la compétence à créer
+     * @param requestDto les informations de la compétence à créer
      * @return la compétence créée
      */
-    public CompetenceResponseDto createCompetence(CompetenceRequestDto competenceRequest) {
+    @Override
+    public ResponseDto create(RequestDto requestDto) {
+        CompetenceRequestDto competenceRequest = (CompetenceRequestDto) requestDto;
         return toDto(competenceRepository.save(toEntity(competenceRequest)));
-    }
-
-    /**
-     * Récupère une compétence à partir de son identifiant.
-     *
-     * @param id L'identifiant de la compétence à récupérer.
-     * @return CompetenceResponseDto Les détails de la compétence récupérée.
-     */
-    public CompetenceResponseDto getCompetenceById(Long id) {
-        Competence competence = competenceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Compétence non trouvée"));
-        return toDto(competence);
-    }
-
-    /**
-     * Récupère la liste de toutes les compétences.
-     *
-     * @return List<CompetenceResponseDto> La liste des compétences récupérées.
-     */
-    public List<CompetenceResponseDto> getAllCompetences() {
-        return competenceRepository.findAll().stream()
-                .map(this::toDto)
-                .toList();
     }
 
     /**
      * Modifie une compétence existante.
      *
      * @param id L'identifiant de la compétence à modifier.
-     * @param competenceRequest Les données de la requête pour modifier la compétence.
-     * @return CompetenceResponseDto Les détails de la compétence modifiée.
+     * @param requestDto Les données de la requête pour modifier la compétence.
+     * @return ResponseDto Les détails de la compétence modifiée.
      */
-    public CompetenceResponseDto updateCompetenceById(Long id, CompetenceRequestDto competenceRequest) {
+    @Override
+    public ResponseDto update(Long id, RequestDto requestDto) {
+        CompetenceRequestDto competenceRequest = (CompetenceRequestDto) requestDto;
         Competence competence = competenceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Compétence non trouvée"));
         competence.setNom(competenceRequest.getNom());
         competence.setDescription(competenceRequest.getDescription());
         return toDto(competenceRepository.save(competence));
-    }
-
-    /**
-     * Supprime une compétence à partir de son identifiant.
-     *
-     * @param id L'identifiant de la compétence à supprimer.
-     * @return CompetenceResponseDto Les détails de la compétence supprimée.
-     */
-    public CompetenceResponseDto deleteCompetenceById(Long id) {
-        Competence competence = competenceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Compétence non trouvée"));
-        competenceRepository.deleteById(id);
-        return toDto(competence);
     }
 }

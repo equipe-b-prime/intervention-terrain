@@ -11,7 +11,7 @@ import lombok.*;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class AgenceRequestDto {
+public class AgenceRequestDto implements RequestDto {
     private Long id;
     private String nom;
     private String ville;

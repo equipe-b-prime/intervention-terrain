@@ -1,76 +1,25 @@
 package com.interventionTerrain.interventionTerrain.controller;
 
 import com.interventionTerrain.interventionTerrain.dto.CompetenceResponseDto;
-import com.interventionTerrain.interventionTerrain.dto.TechnicienRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienResponseDto;
-import lombok.RequiredArgsConstructor;
+import com.interventionTerrain.interventionTerrain.service.TechnicienService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import com.interventionTerrain.interventionTerrain.service.TechnicienService;
 
 /**
  * Contrôleur REST exposant les endpoints de gestion des techniciens.
+ * Le CRUD standard est hérité de {@link CrudController} ; seules les
+ * requêtes métier propres aux techniciens sont déclarées ici.
  */
 @RestController
 @RequestMapping("/techniciens")
-@RequiredArgsConstructor
-public class TechnicienController {
+public class TechnicienController extends CrudController {
     private final TechnicienService technicienService;
 
-    /**
-     * Crée un nouveau technicien.
-     *
-     * @param technicienRequest les informations du technicien à créer
-     * @return le technicien créé
-     */
-    @PostMapping
-    public TechnicienResponseDto createTechnicien(@RequestBody TechnicienRequestDto technicienRequest) {
-        return technicienService.createTechnicien(technicienRequest);
-    }
-
-    /**
-     * Récupère un technicien à partir de son identifiant.
-     *
-     * @param id L'identifiant du technicien à récupérer.
-     * @return TechnicienResponseDto Les détails du technicien récupéré.
-     */
-    @GetMapping("/{id}")
-    public TechnicienResponseDto getTechnicienById(@PathVariable Long id) {
-        return technicienService.getTechnicienById(id);
-    }
-
-    /**
-     * Récupère la liste de tous les techniciens.
-     *
-     * @return List<TechnicienResponseDto> La liste des techniciens récupérés.
-     */
-    @GetMapping
-    public List<TechnicienResponseDto> getAllTechniciens() {
-        return technicienService.getAllTechniciens();
-    }
-
-    /**
-     * Modifie un technicien existant.
-     *
-     * @param id L'identifiant du technicien à modifier.
-     * @param technicienRequest Les données de la requête pour modifier le technicien.
-     * @return TechnicienResponseDto Les détails du technicien modifié.
-     */
-    @PutMapping("/{id}")
-    public TechnicienResponseDto updateTechnicienById(@PathVariable Long id, @RequestBody TechnicienRequestDto technicienRequest) {
-        return technicienService.updateTechnicienById(id, technicienRequest);
-    }
-
-    /**
-     * Supprime un technicien à partir de son identifiant.
-     *
-     * @param id L'identifiant du technicien à supprimer.
-     * @return TechnicienResponseDto Les détails du technicien supprimé.
-     */
-    @DeleteMapping("/{id}")
-    public TechnicienResponseDto deleteTechnicienById(@PathVariable Long id) {
-        return technicienService.deleteTechnicienById(id);
+    public TechnicienController(TechnicienService technicienService) {
+        super(technicienService);
+        this.technicienService = technicienService;
     }
 
     /**

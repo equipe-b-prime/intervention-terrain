@@ -12,4 +12,5 @@ public class Statut {
     private Long id;
     @Column(nullable = false)
     private String libelle ;
+
 }

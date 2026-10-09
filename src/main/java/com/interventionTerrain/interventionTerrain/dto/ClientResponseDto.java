@@ -10,7 +10,7 @@ import lombok.*;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class ClientResponseDto {
+public class ClientResponseDto implements ResponseDto {
     private Long id;
     private String nom;
     private String prenom;

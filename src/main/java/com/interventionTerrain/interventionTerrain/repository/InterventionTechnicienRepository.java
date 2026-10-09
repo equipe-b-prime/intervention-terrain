@@ -5,8 +5,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
-
 import com.interventionTerrain.interventionTerrain.entity.InterventionTechnicien;
 
 /**
@@ -22,7 +20,7 @@ public interface InterventionTechnicienRepository extends JpaRepository<Interven
      * @param interventionId L'identifiant de l'intervention.
      * @return List<InterventionTechnicien> Les lignes associatives.
      */
-    Optional<InterventionTechnicien> findByInterventionId(Long interventionId);
+    List<InterventionTechnicien> findByInterventionId(Long interventionId);
 
     /**
      * Supprime les affectations de techniciens d'une intervention.

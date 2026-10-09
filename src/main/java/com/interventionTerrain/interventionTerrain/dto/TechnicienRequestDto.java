@@ -11,7 +11,7 @@ import lombok.*;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class TechnicienRequestDto {
+public class TechnicienRequestDto implements RequestDto {
     private Long id;
     private String nom;
     private String prenom;

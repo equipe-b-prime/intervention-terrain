@@ -5,8 +5,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
-
 import com.interventionTerrain.interventionTerrain.entity.InterventionCreneaux;
 
 /**
@@ -22,7 +20,7 @@ public interface InterventionCreneauxRepository extends JpaRepository<Interventi
      * @param interventionId L'identifiant de l'intervention.
      * @return List<InterventionCreneaux> Les lignes associatives.
      */
-    Optional<InterventionCreneaux> findByInterventionId(Long interventionId);
+    List<InterventionCreneaux> findByInterventionId(Long interventionId);
 
     /**
      * Supprime les créneaux associés à une intervention.

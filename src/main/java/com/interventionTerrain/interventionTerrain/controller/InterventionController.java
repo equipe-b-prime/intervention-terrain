@@ -1,75 +1,24 @@
 package com.interventionTerrain.interventionTerrain.controller;
 
-import com.interventionTerrain.interventionTerrain.dto.InterventionRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.InterventionResponseDto;
-import lombok.RequiredArgsConstructor;
+import com.interventionTerrain.interventionTerrain.service.InterventionService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import com.interventionTerrain.interventionTerrain.service.InterventionService;
 
 /**
  * Contrôleur REST exposant les endpoints de gestion des interventions.
+ * Le CRUD standard est hérité de {@link CrudController} ; seules les
+ * requêtes métier propres aux interventions sont déclarées ici.
  */
 @RestController
 @RequestMapping("/interventions")
-@RequiredArgsConstructor
-public class InterventionController {
+public class InterventionController extends CrudController {
     private final InterventionService interventionService;
 
-    /**
-     * Crée une nouvelle intervention.
-     *
-     * @param interventionRequest les informations de l'intervention à créer
-     * @return l'intervention créée
-     */
-    @PostMapping
-    public InterventionResponseDto createIntervention(@RequestBody InterventionRequestDto interventionRequest) {
-        return interventionService.createIntervention(interventionRequest);
-    }
-
-    /**
-     * Récupère une intervention à partir de son identifiant.
-     *
-     * @param id L'identifiant de l'intervention à récupérer.
-     * @return InterventionResponseDto Les détails de l'intervention récupérée.
-     */
-    @GetMapping("/{id}")
-    public InterventionResponseDto getInterventionById(@PathVariable Long id) {
-        return interventionService.getInterventionById(id);
-    }
-
-    /**
-     * Récupère la liste de toutes les interventions.
-     *
-     * @return List<InterventionResponseDto> La liste des interventions récupérées.
-     */
-    @GetMapping
-    public List<InterventionResponseDto> getAllInterventions() {
-        return interventionService.getAllInterventions();
-    }
-
-    /**
-     * Modifie une intervention existante.
-     *
-     * @param id L'identifiant de l'intervention à modifier.
-     * @param interventionRequest Les données de la requête pour modifier l'intervention.
-     * @return InterventionResponseDto Les détails de l'intervention modifiée.
-     */
-    @PutMapping("/{id}")
-    public InterventionResponseDto updateInterventionById(@PathVariable Long id, @RequestBody InterventionRequestDto interventionRequest) {
-        return interventionService.updateInterventionById(id, interventionRequest);
-    }
-
-    /**
-     * Supprime une intervention à partir de son identifiant.
-     *
-     * @param id L'identifiant de l'intervention à supprimer.
-     * @return InterventionResponseDto Les détails de l'intervention supprimée.
-     */
-    @DeleteMapping("/{id}")
-    public InterventionResponseDto deleteInterventionById(@PathVariable Long id) {
-        return interventionService.deleteInterventionById(id);
+    public InterventionController(InterventionService interventionService) {
+        super(interventionService);
+        this.interventionService = interventionService;
     }
 
     /**
