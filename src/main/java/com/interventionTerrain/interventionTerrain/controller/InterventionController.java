@@ -1,56 +1,54 @@
 package com.interventionTerrain.interventionTerrain.controller;
 
-import com.interventionTerrain.interventionTerrain.dto.InterventionResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.InterventionRequestDto;
+import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import com.interventionTerrain.interventionTerrain.service.InterventionService;
+import com.interventionTerrain.interventionTerrain.utils.response.Response;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.LocalDate;
 
-/**
- * Contrôleur REST exposant les endpoints de gestion des interventions.
- * Le CRUD standard est hérité de {@link CrudController} ; seules les
- * requêtes métier propres aux interventions sont déclarées ici.
- */
 @RestController
 @RequestMapping("/interventions")
-public class InterventionController extends CrudController {
+public class InterventionController {
+
     private final InterventionService interventionService;
 
     public InterventionController(InterventionService interventionService) {
-        super(interventionService);
         this.interventionService = interventionService;
     }
 
-    /**
-     * Récupère les interventions d'un client.
-     *
-     * @param clientId L'identifiant du client.
-     * @return List<InterventionResponseDto> Les interventions du client.
-     */
-    @GetMapping("/client/{clientId}")
-    public List<InterventionResponseDto> getInterventionsByClient(@PathVariable Long clientId) {
-        return interventionService.getInterventionsByClient(clientId);
+    @GetMapping
+    public Response<ResponseDto> getAll(@RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(defaultValue = "10") int taille,
+                                        @RequestParam(required = false) String statut,
+                                        @RequestParam(required = false) LocalDate du,
+                                        @RequestParam(required = false) LocalDate au) {
+        if (statut != null || du != null || au != null) {
+            return new Response<>(interventionService.getAllFiltre(statut, du, au, page, taille));
+        }
+        return new Response<>(interventionService.getAll(page, taille));
     }
 
-    /**
-     * Récupère les interventions d'un technicien.
-     *
-     * @param technicienId L'identifiant du technicien.
-     * @return List<InterventionResponseDto> Les interventions du technicien.
-     */
-    @GetMapping("/technicien/{technicienId}")
-    public List<InterventionResponseDto> getInterventionsByTechnicien(@PathVariable Long technicienId) {
-        return interventionService.getInterventionsByTechnicien(technicienId);
+    @GetMapping("/{id}")
+    public Response<ResponseDto> getById(@PathVariable Long id) throws Throwable {
+        return new Response<>(interventionService.getById(id));
     }
 
-    /**
-     * Récupère les interventions par statut.
-     *
-     * @param statut Le statut recherché.
-     * @return List<InterventionResponseDto> Les interventions correspondantes.
-     */
-    @GetMapping("/statut/{statut}")
-    public List<InterventionResponseDto> getInterventionsByStatut(@PathVariable String statut) {
-        return interventionService.getInterventionsByStatut(statut);
+    @PostMapping
+    public Response<ResponseDto> create(@Valid @RequestBody InterventionRequestDto interventionRequest) {
+        return new Response<>(interventionService.create(interventionRequest));
+    }
+
+    @PutMapping("/{id}")
+    public Response<ResponseDto> update(@PathVariable Long id,
+                                        @Valid @RequestBody InterventionRequestDto interventionRequest) {
+        return new Response<>(interventionService.update(id, interventionRequest));
+    }
+
+    @DeleteMapping("/{id}")
+    public Response<ResponseDto> delete(@PathVariable Long id) throws Throwable {
+        return new Response<>(interventionService.delete(id));
     }
 }

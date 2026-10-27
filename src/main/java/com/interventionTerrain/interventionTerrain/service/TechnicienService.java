@@ -3,6 +3,7 @@ package com.interventionTerrain.interventionTerrain.service;
 import com.interventionTerrain.interventionTerrain.dto.AgenceResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.CommuneResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.CompetenceResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.TechnicienCompetenceResponseDto;
 import com.interventionTerrain.interventionTerrain.entity.Competence;
 import com.interventionTerrain.interventionTerrain.entity.Equipe;
 import com.interventionTerrain.interventionTerrain.repository.EquipeRepository;
@@ -11,18 +12,22 @@ import com.interventionTerrain.interventionTerrain.dto.RequestDto;
 import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienResponseDto;
+import com.interventionTerrain.interventionTerrain.exception.DoublonRessourceException;
+import com.interventionTerrain.interventionTerrain.exception.NotFoundException;
+import com.interventionTerrain.interventionTerrain.exception.RessourceUtiliseeException;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienCompetenceRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import com.interventionTerrain.interventionTerrain.entity.Technicien;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienRepository;
 
-/**
- * Service métier gérant les techniciens.
- * Fournit la création, la modification et les conversions entité/DTO.
- * La lecture et la suppression sont héritées de {@link AbstractCrudService}.
- */
 @Service
 public class TechnicienService extends AbstractCrudService {
 
@@ -30,13 +35,6 @@ public class TechnicienService extends AbstractCrudService {
     private final EquipeRepository equipeRepository;
     private final TechnicienCompetenceRepository technicienCompetenceRepository;
 
-    /**
-     * Constructeur injectant les repositories du technicien.
-     *
-     * @param technicienRepository le repository des techniciens
-     * @param equipeRepository le repository des équipes (résolution de la FK)
-     * @param technicienCompetenceRepository le repository de l'association technicien/compétence
-     */
     public TechnicienService(TechnicienRepository technicienRepository,
                              EquipeRepository equipeRepository,
                              TechnicienCompetenceRepository technicienCompetenceRepository) {
@@ -46,13 +44,6 @@ public class TechnicienService extends AbstractCrudService {
         this.technicienCompetenceRepository = technicienCompetenceRepository;
     }
 
-    /**
-     * Convertit les données d'une requête en entité technicien.
-     *
-     * @param technicienRequest Les données de la requête pour créer le technicien.
-     * @param equipe L'équipe associée au technicien.
-     * @return Technicien L'entité technicien créée.
-     */
     public Technicien toEntity(TechnicienRequestDto technicienRequest, Equipe equipe) {
         return Technicien.builder()
                 .nom(technicienRequest.getNom())
@@ -64,12 +55,6 @@ public class TechnicienService extends AbstractCrudService {
                 .build();
     }
 
-    /**
-     * Convertit une entité technicien en objet de réponse.
-     *
-     * @param entity L'entité technicien à convertir.
-     * @return ResponseDto Les détails du technicien converti.
-     */
     @Override
     public ResponseDto toDto(Object entity) {
         Technicien technicien = (Technicien) entity;
@@ -98,49 +83,55 @@ public class TechnicienService extends AbstractCrudService {
                 .build();
     }
 
-    /**
-     * Crée un nouveau technicien.
-     *
-     * @param requestDto les informations du technicien à créer
-     * @return le technicien créé
-     */
+    @Override
+    public Page<ResponseDto> getAll(int page, int taille) {
+        Sort sort = Sort.by(Sort.Order.asc("nom"));
+        Pageable pageable = PageRequest.of(pageAutorisee(page), tailleAutorisee(taille), sort);
+        return technicienRepository.findAll(pageable).map(this::toDto);
+    }
+
     @Override
     public ResponseDto create(RequestDto requestDto) {
         TechnicienRequestDto technicienRequest = (TechnicienRequestDto) requestDto;
+        if (technicienRepository.existsByMatriculeIgnoreCase(technicienRequest.getMatricule())) {
+            throw new DoublonRessourceException("Un technicien portant le matricule '"
+                    + technicienRequest.getMatricule() + "' existe déjà");
+        }
         Equipe equipe = equipeRepository.findById(technicienRequest.getEquipeId())
-                .orElseThrow(() -> new RuntimeException("Équipe non trouvée"));
+                .orElseThrow(() -> new NotFoundException("Équipe non trouvée"));
         return toDto(technicienRepository.save(toEntity(technicienRequest, equipe)));
     }
 
-    /**
-     * Modifie un technicien existant.
-     *
-     * @param id L'identifiant du technicien à modifier.
-     * @param requestDto Les données de la requête pour modifier le technicien.
-     * @return ResponseDto Les détails du technicien modifié.
-     */
     @Override
     public ResponseDto update(Long id, RequestDto requestDto) {
         TechnicienRequestDto technicienRequest = (TechnicienRequestDto) requestDto;
         Technicien technicien = technicienRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Technicien non trouvé"));
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        if (!Objects.equals(technicien.getMatricule(), technicienRequest.getMatricule())) {
+            throw new IllegalArgumentException("Le matricule d'un technicien est figé");
+        }
         Equipe equipe = equipeRepository.findById(technicienRequest.getEquipeId())
-                .orElseThrow(() -> new RuntimeException("Équipe non trouvée"));
+                .orElseThrow(() -> new NotFoundException("Équipe non trouvée"));
         technicien.setNom(technicienRequest.getNom());
         technicien.setPrenom(technicienRequest.getPrenom());
         technicien.setEmail(technicienRequest.getEmail());
         technicien.setTelephone(technicienRequest.getTelephone());
-        technicien.setMatricule(technicienRequest.getMatricule());
         technicien.setEquipe(equipe);
         return toDto(technicienRepository.save(technicien));
     }
 
-    /**
-     * Récupère les techniciens d'une agence (requête personnalisée avec jointure).
-     *
-     * @param agenceId L'identifiant de l'agence.
-     * @return List<TechnicienResponseDto> Les techniciens de l'agence.
-     */
+    @Override
+    public ResponseDto delete(Long id) throws Throwable {
+        Technicien technicien = technicienRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        if (technicienRepository.existsInterventionByTechnicienId(id)) {
+            throw new RessourceUtiliseeException("Technicien", id, "Intervention");
+        }
+        ResponseDto response = toDto(technicien);
+        technicienRepository.deleteById(id);
+        return response;
+    }
+
     public List<TechnicienResponseDto> getTechniciensByAgence(Long agenceId) {
         return technicienRepository.findByAgenceId(agenceId).stream()
                 .map(this::toDto)
@@ -148,29 +139,39 @@ public class TechnicienService extends AbstractCrudService {
                 .toList();
     }
 
-    /**
-     * Récupère les compétences d'un technicien (via la table associative).
-     *
-     * @param technicienId L'identifiant du technicien.
-     * @return List<CompetenceResponseDto> Les compétences du technicien.
-     */
-    public List<CompetenceResponseDto> getCompetencesByTechnicien(Long technicienId) {
+    public List<TechnicienCompetenceResponseDto> getCompetencesByTechnicien(Long technicienId) {
+        technicienRepository.findById(technicienId)
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        LocalDate aujourd = LocalDate.now();
         return technicienCompetenceRepository.findByTechnicienId(technicienId).stream()
-                .map(link -> toCompetenceResponse(link.getCompetence()))
+                .map(link -> TechnicienCompetenceResponseDto.builder()
+                        .id(link.getCompetence().getId())
+                        .nom(link.getCompetence().getNom())
+                        .description(link.getCompetence().getDescription())
+                        .dateObtention(link.getDateObtention())
+                        .dateExpiration(link.getDateExpiration())
+                        .expiree(link.getDateExpiration() != null && link.getDateExpiration().isBefore(aujourd))
+                        .build())
                 .toList();
     }
 
-    /**
-     * Construit la réponse d'une compétence.
-     *
-     * @param competence L'entité compétence.
-     * @return CompetenceResponseDto La réponse de la compétence.
-     */
     private CompetenceResponseDto toCompetenceResponse(Competence competence) {
         return CompetenceResponseDto.builder()
                 .id(competence.getId())
                 .nom(competence.getNom())
                 .description(competence.getDescription())
                 .build();
+    }
+
+    public ResponseDto getByNom(String nom) {
+        Object entity = technicienRepository.findByNom(nom).stream()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        return toDto(entity);
+    }
+
+    @Override
+    protected String messageIntrouvable() {
+        return "Technicien non trouvé";
     }
 }

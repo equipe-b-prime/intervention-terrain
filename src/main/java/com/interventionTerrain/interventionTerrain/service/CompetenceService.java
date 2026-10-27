@@ -4,37 +4,28 @@ import com.interventionTerrain.interventionTerrain.dto.CompetenceRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.CompetenceResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.RequestDto;
 import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
+import com.interventionTerrain.interventionTerrain.exception.DoublonRessourceException;
+import com.interventionTerrain.interventionTerrain.exception.NotFoundException;
+import com.interventionTerrain.interventionTerrain.exception.RessourceUtiliseeException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import com.interventionTerrain.interventionTerrain.entity.Competence;
 import com.interventionTerrain.interventionTerrain.repository.CompetenceRepository;
 
-/**
- * Service métier gérant les compétences.
- * Fournit la création, la modification et les conversions entité/DTO.
- * La lecture et la suppression sont héritées de {@link AbstractCrudService}.
- */
 @Service
 public class CompetenceService extends AbstractCrudService {
 
     private final CompetenceRepository competenceRepository;
 
-    /**
-     * Constructeur injectant le repository des compétences.
-     *
-     * @param competenceRepository le repository des compétences
-     */
     public CompetenceService(CompetenceRepository competenceRepository) {
         super(competenceRepository);
         this.competenceRepository = competenceRepository;
     }
 
-    /**
-     * Convertit les données d'une requête en entité compétence.
-     *
-     * @param competenceRequest Les données de la requête pour créer la compétence.
-     * @return Competence L'entité compétence créée.
-     */
     public Competence toEntity(CompetenceRequestDto competenceRequest) {
         return Competence.builder()
                 .nom(competenceRequest.getNom())
@@ -42,12 +33,6 @@ public class CompetenceService extends AbstractCrudService {
                 .build();
     }
 
-    /**
-     * Convertit une entité compétence en objet de réponse.
-     *
-     * @param entity L'entité compétence à convertir.
-     * @return ResponseDto Les détails de la compétence convertie.
-     */
     @Override
     public ResponseDto toDto(Object entity) {
         Competence competence = (Competence) entity;
@@ -58,32 +43,57 @@ public class CompetenceService extends AbstractCrudService {
                 .build();
     }
 
-    /**
-     * Crée une nouvelle compétence.
-     *
-     * @param requestDto les informations de la compétence à créer
-     * @return la compétence créée
-     */
+    @Override
+    public Page<ResponseDto> getAll(int page, int taille) {
+        Sort sort = Sort.by(Sort.Order.asc("nom"));
+        Pageable pageable = PageRequest.of(pageAutorisee(page), tailleAutorisee(taille), sort);
+        return competenceRepository.findAll(pageable).map(this::toDto);
+    }
+
     @Override
     public ResponseDto create(RequestDto requestDto) {
         CompetenceRequestDto competenceRequest = (CompetenceRequestDto) requestDto;
+        if (competenceRepository.existsByNomIgnoreCase(competenceRequest.getNom())) {
+            throw new DoublonRessourceException("Une compétence nommée '"
+                    + competenceRequest.getNom() + "' existe déjà");
+        }
         return toDto(competenceRepository.save(toEntity(competenceRequest)));
     }
 
-    /**
-     * Modifie une compétence existante.
-     *
-     * @param id L'identifiant de la compétence à modifier.
-     * @param requestDto Les données de la requête pour modifier la compétence.
-     * @return ResponseDto Les détails de la compétence modifiée.
-     */
     @Override
     public ResponseDto update(Long id, RequestDto requestDto) {
         CompetenceRequestDto competenceRequest = (CompetenceRequestDto) requestDto;
         Competence competence = competenceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Compétence non trouvée"));
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        if (competenceRepository.existsByNomIgnoreCaseAndIdNot(competenceRequest.getNom(), id)) {
+            throw new DoublonRessourceException("Une compétence nommée '"
+                    + competenceRequest.getNom() + "' existe déjà");
+        }
         competence.setNom(competenceRequest.getNom());
         competence.setDescription(competenceRequest.getDescription());
         return toDto(competenceRepository.save(competence));
+    }
+
+    @Override
+    public ResponseDto delete(Long id) throws Throwable {
+        Competence competence = competenceRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        if (competenceRepository.existsTechnicienByCompetenceId(id)) {
+            throw new RessourceUtiliseeException("Competence", id, "Technicien");
+        }
+        ResponseDto response = toDto(competence);
+        competenceRepository.deleteById(id);
+        return response;
+    }
+
+    public ResponseDto getByNom(String nom) {
+        Competence competence = competenceRepository.findByNom(nom)
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        return toDto(competence);
+    }
+
+    @Override
+    protected String messageIntrouvable() {
+        return "Compétence non trouvée";
     }
 }

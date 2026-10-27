@@ -2,12 +2,13 @@ package com.interventionTerrain.interventionTerrain.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
 import com.interventionTerrain.interventionTerrain.entity.Client;
 
-/**
- * Repository JPA pour l'accès aux données des clients.
- * Fournit les opérations CRUD standard sur la table "client".
- */
 @Repository
 public interface ClientRepository extends JpaRepository<Client, Long> {
+    Optional<Client> findByNom(String nom);
+    List<Client> findByNomIgnoreCase(String nom);
 }

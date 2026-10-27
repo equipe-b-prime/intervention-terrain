@@ -16,24 +16,33 @@ import com.interventionTerrain.interventionTerrain.entity.TypeIntervention;
 import com.interventionTerrain.interventionTerrain.dto.InterventionRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.InterventionResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienResponseDto;
+import com.interventionTerrain.interventionTerrain.exception.NotFoundException;
 import com.interventionTerrain.interventionTerrain.repository.InterventionCreneauxRepository;
 import com.interventionTerrain.interventionTerrain.repository.InterventionTechnicienRepository;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienRepository;
 import com.interventionTerrain.interventionTerrain.repository.TypeInterventionRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import com.interventionTerrain.interventionTerrain.entity.Intervention;
 import com.interventionTerrain.interventionTerrain.repository.InterventionRepository;
 
-/**
- * Service métier gérant les interventions.
- * Fournit la création, la modification, la suppression et les conversions entité/DTO.
- * Le technicien et le créneau sont gérés via les tables associatives existantes
- * (intervention_technicien et intervention_creneau), sans nouvelle relation.
- */
 @Service
 public class InterventionService extends AbstractCrudService {
+
+    private static final String STATUT_PLANIFIEE = "PLANIFIEE";
+    private static final Set<String> STATUTS_VALIDES = Set.of("PLANIFIEE", "EN_COURS", "TERMINEE", "ECHOUEE", "ANNULEE");
+    private static final long MAX_PERIOD_DAYS = 90;
 
     private final InterventionRepository interventionRepository;
     private final ClientRepository clientRepository;
@@ -44,18 +53,6 @@ public class InterventionService extends AbstractCrudService {
     private final InterventionCreneauxRepository interventionCreneauxRepository;
     private final TechnicienService technicienService;
 
-    /**
-     * Constructeur injectant les repositories nécessaires à l'intervention.
-     *
-     * @param interventionRepository le repository des interventions
-     * @param clientRepository le repository des clients
-     * @param typeInterventionRepository le repository des types d'intervention
-     * @param technicienRepository le repository des techniciens
-     * @param creneauRepository le repository des créneaux
-     * @param interventionTechnicienRepository le repository de l'association intervention/technicien
-     * @param interventionCreneauxRepository le repository de l'association intervention/créneau
-     * @param technicienService le service des techniciens (conversion du technicien associé)
-     */
     public InterventionService(InterventionRepository interventionRepository,
                                ClientRepository clientRepository,
                                TypeInterventionRepository typeInterventionRepository,
@@ -75,18 +72,10 @@ public class InterventionService extends AbstractCrudService {
         this.technicienService = technicienService;
     }
 
-    /**
-     * Convertit les données d'une requête en entité intervention.
-     *
-     * @param interventionRequest Les données de la requête pour créer l'intervention.
-     * @param typeIntervention Le type d'intervention associé.
-     * @param client Le client associé à l'intervention.
-     * @return Intervention L'entité intervention créée.
-     */
     public Intervention toEntity(InterventionRequestDto interventionRequest, TypeIntervention typeIntervention, Client client) {
         return Intervention.builder()
                 .datePlanifiee(interventionRequest.getDatePlanifiee())
-                .statut(interventionRequest.getStatut())
+                .statut(STATUT_PLANIFIEE)
                 .commentaire(interventionRequest.getCommentaire())
                 .reference(interventionRequest.getReference())
                 .typeIntervention(typeIntervention)
@@ -94,12 +83,6 @@ public class InterventionService extends AbstractCrudService {
                 .build();
     }
 
-    /**
-     * Convertit une entité intervention en objet de réponse.
-     *
-     * @param entity L'entité intervention à convertir.
-     * @return ResponseDto Les détails de l'intervention convertie.
-     */
     @Override
     public ResponseDto toDto(Object entity) {
         Intervention intervention = (Intervention) entity;
@@ -126,72 +109,109 @@ public class InterventionService extends AbstractCrudService {
                         .email(intervention.getClient().getEmail())
                         .telephone(intervention.getClient().getTelephone())
                         .adresse(intervention.getClient().getAdresse())
+                        .commune(intervention.getClient().getCommune())
                         .build())
                 .technicien(technicien == null ? null : (TechnicienResponseDto) technicienService.toDto(technicien))
                 .creneau(toCreneauResponse(creneau))
                 .build();
     }
 
-    /**
-     * Crée une nouvelle intervention ainsi que ses associations technicien et créneau.
-     *
-     * @param requestDto les informations de l'intervention à créer
-     * @return l'intervention créée
-     */
     @Override
+    @Transactional
     public ResponseDto create(RequestDto requestDto) {
         InterventionRequestDto interventionRequest = (InterventionRequestDto) requestDto;
+
         TypeIntervention typeIntervention = typeInterventionRepository.findById(interventionRequest.getTypeInterventionId())
-                .orElseThrow(() -> new RuntimeException("Type d'intervention non trouvé"));
+                .orElseThrow(() -> new NotFoundException("Type d'intervention non trouvé"));
         Client client = clientRepository.findById(interventionRequest.getClientId())
-                .orElseThrow(() -> new RuntimeException("Client non trouvé"));
-        Intervention intervention = interventionRepository.save(toEntity(interventionRequest, typeIntervention, client));
-        saveAssociations(intervention, interventionRequest);
+                .orElseThrow(() -> new NotFoundException("Client non trouvé"));
+        Technicien technicien = technicienRepository.findById(interventionRequest.getTechnicienId())
+                .orElseThrow(() -> new NotFoundException("Technicien non trouvé"));
+        Creneau creneau = creneauRepository.findById(interventionRequest.getCreneauId())
+                .orElseThrow(() -> new NotFoundException("Créneau non trouvé"));
+
+        if (!creneau.getDateFin().isAfter(creneau.getDateDebut())) {
+            throw new IllegalArgumentException("L'heure de fin doit être postérieure à l'heure de début");
+        }
+        if (creneau.getDateDebut().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Le créneau doit être dans le futur");
+        }
+
+        Intervention intervention = toEntity(interventionRequest, typeIntervention, client);
+        intervention = interventionRepository.save(intervention);
+
+        interventionTechnicienRepository.save(InterventionTechnicien.builder()
+                .intervention(intervention)
+                .technicien(technicien)
+                .estResponsable(Boolean.TRUE)
+                .build());
+
+        interventionCreneauxRepository.save(InterventionCreneaux.builder()
+                .intervention(intervention)
+                .creneau(creneau)
+                .build());
+
         return toDto(intervention);
     }
 
-    /**
-     * Modifie une intervention existante et réassocie technicien et créneau.
-     *
-     * @param id L'identifiant de l'intervention à modifier.
-     * @param requestDto Les données de la requête pour modifier l'intervention.
-     * @return ResponseDto Les détails de l'intervention modifiée.
-     */
     @Override
+    @Transactional
     public ResponseDto update(Long id, RequestDto requestDto) {
-        InterventionRequestDto interventionRequest = (InterventionRequestDto) requestDto;
         Intervention intervention = interventionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Intervention non trouvée"));
+                .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
+
+        if (!STATUT_PLANIFIEE.equals(intervention.getStatut())) {
+            throw new IllegalStateException("Impossible de modifier une intervention qui n'est pas PLANIFIEE");
+        }
+
+        InterventionRequestDto interventionRequest = (InterventionRequestDto) requestDto;
+
         TypeIntervention typeIntervention = typeInterventionRepository.findById(interventionRequest.getTypeInterventionId())
-                .orElseThrow(() -> new RuntimeException("Type d'intervention non trouvé"));
+                .orElseThrow(() -> new NotFoundException("Type d'intervention non trouvé"));
         Client client = clientRepository.findById(interventionRequest.getClientId())
-                .orElseThrow(() -> new RuntimeException("Client non trouvé"));
+                .orElseThrow(() -> new NotFoundException("Client non trouvé"));
+        Technicien technicien = technicienRepository.findById(interventionRequest.getTechnicienId())
+                .orElseThrow(() -> new NotFoundException("Technicien non trouvé"));
+        Creneau creneau = creneauRepository.findById(interventionRequest.getCreneauId())
+                .orElseThrow(() -> new NotFoundException("Créneau non trouvé"));
+
+        if (!creneau.getDateFin().isAfter(creneau.getDateDebut())) {
+            throw new IllegalArgumentException("L'heure de fin doit être postérieure à l'heure de début");
+        }
+
         intervention.setDatePlanifiee(interventionRequest.getDatePlanifiee());
-        intervention.setStatut(interventionRequest.getStatut());
-        intervention.setCommentaire(interventionRequest.getCommentaire());
-        intervention.setReference(interventionRequest.getReference());
         intervention.setTypeIntervention(typeIntervention);
         intervention.setClient(client);
+        intervention.setCommentaire(interventionRequest.getCommentaire());
+        intervention.setReference(interventionRequest.getReference());
         interventionRepository.save(intervention);
+
         interventionTechnicienRepository.deleteByInterventionId(id);
+        interventionTechnicienRepository.save(InterventionTechnicien.builder()
+                .intervention(intervention)
+                .technicien(technicien)
+                .estResponsable(Boolean.TRUE)
+                .build());
+
         interventionCreneauxRepository.deleteByInterventionId(id);
-        saveAssociations(intervention, interventionRequest);
+        interventionCreneauxRepository.save(InterventionCreneaux.builder()
+                .intervention(intervention)
+                .creneau(creneau)
+                .build());
+
         return toDto(intervention);
     }
 
-    /**
-     * Supprime une intervention ainsi que ses associations technicien et créneau.
-     * La suppression des associations doit précéder la suppression de l'intervention,
-     * sous peine de violation des contraintes de clé étrangère.
-     *
-     * @param id L'identifiant de l'intervention à supprimer.
-     * @return ResponseDto Les détails de l'intervention supprimée.
-     * @throws Throwable si l'intervention à supprimer n'existe pas
-     */
     @Override
+    @Transactional
     public ResponseDto delete(Long id) throws Throwable {
         Intervention intervention = interventionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Intervention non trouvée"));
+                .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
+
+        if (!STATUT_PLANIFIEE.equals(intervention.getStatut())) {
+            throw new IllegalStateException("Seules les interventions PLANIFIEE peuvent être supprimées");
+        }
+
         ResponseDto response = toDto(intervention);
         interventionTechnicienRepository.deleteByInterventionId(id);
         interventionCreneauxRepository.deleteByInterventionId(id);
@@ -199,85 +219,69 @@ public class InterventionService extends AbstractCrudService {
         return response;
     }
 
-    /**
-     * Récupère les interventions d'un client (requête personnalisée avec jointure).
-     *
-     * @param clientId L'identifiant du client.
-     * @return List<InterventionResponseDto> Les interventions du client.
-     */
-    public List<InterventionResponseDto> getInterventionsByClient(Long clientId) {
+    @Override
+    public Page<ResponseDto> getAll(int page, int taille) {
+        Sort sort = Sort.by(Sort.Order.asc("datePlanifiee"));
+        Pageable pageable = PageRequest.of(pageAutorisee(page), tailleAutorisee(taille), sort);
+        return interventionRepository.findAll(pageable).map(this::toDto);
+    }
+
+    public List<ResponseDto> getHistoriqueByClient(Long clientId) {
+        clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Client non trouvé"));
         return interventionRepository.findByClientId(clientId).stream()
                 .map(this::toDto)
-                .map(InterventionResponseDto.class::cast)
                 .toList();
     }
 
-    /**
-     * Récupère les interventions d'un technicien (requête personnalisée avec jointure).
-     *
-     * @param technicienId L'identifiant du technicien.
-     * @return List<InterventionResponseDto> Les interventions du technicien.
-     */
-    public List<InterventionResponseDto> getInterventionsByTechnicien(Long technicienId) {
-        return interventionRepository.findByTechnicienId(technicienId).stream()
-                .map(this::toDto)
-                .map(InterventionResponseDto.class::cast)
-                .toList();
-    }
-
-    /**
-     * Récupère les interventions par statut (requête personnalisée).
-     *
-     * @param statut Le statut recherché.
-     * @return List<InterventionResponseDto> Les interventions correspondantes.
-     */
-    public List<InterventionResponseDto> getInterventionsByStatut(String statut) {
-        return interventionRepository.findByStatut(statut).stream()
-                .map(this::toDto)
-                .map(InterventionResponseDto.class::cast)
-                .toList();
-    }
-
-    /**
-     * Crée les associations technicien et créneau d'une intervention.
-     *
-     * @param intervention L'intervention concernée.
-     * @param interventionRequest La requête contenant les identifiants associés.
-     */
-    private void saveAssociations(Intervention intervention, InterventionRequestDto interventionRequest) {
-        if (interventionRequest.getTechnicienId() != null) {
-            Technicien technicien = technicienRepository.findById(interventionRequest.getTechnicienId())
-                    .orElseThrow(() -> new RuntimeException("Technicien non trouvé"));
-            interventionTechnicienRepository.save(InterventionTechnicien.builder()
-                    .intervention(intervention)
-                    .technicien(technicien)
-                    .estResponsable(Boolean.TRUE)
-                    .build());
+    public Page<ResponseDto> getAllFiltre(String statut, LocalDate du, LocalDate au, int page, int taille) {
+        if (statut != null && !STATUTS_VALIDES.contains(statut)) {
+            throw new IllegalArgumentException("Statut inconnu : " + statut);
         }
-        if (interventionRequest.getCreneauId() != null) {
-            Creneau creneau = creneauRepository.findById(interventionRequest.getCreneauId())
-                    .orElseThrow(() -> new RuntimeException("Créneau non trouvé"));
-            interventionCreneauxRepository.save(InterventionCreneaux.builder()
-                    .intervention(intervention)
-                    .creneau(creneau)
-                    .build());
+        LocalDateTime debut = du != null ? du.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime fin = au != null ? au.plusDays(1).atStartOfDay() : LocalDateTime.of(2099, 12, 31, 23, 59);
+        if (debut.isAfter(fin)) {
+            throw new IllegalArgumentException("La date de début ne peut pas être postérieure à la date de fin");
         }
+        Pageable pageable = PageRequest.of(pageAutorisee(page), tailleAutorisee(taille));
+        List<Intervention> resultats;
+        if (statut != null) {
+            resultats = interventionRepository.findByStatutAndDatePlanifieeBetween(statut, debut, fin);
+        } else {
+            resultats = interventionRepository.findByDatePlanifieeBetween(debut, fin);
+        }
+        List<ResponseDto> dtos = resultats.stream().map(this::toDto).toList();
+        return new org.springframework.data.domain.PageImpl<>(dtos, pageable, dtos.size());
     }
 
-    /**
-     * Construit la réponse d'un créneau.
-     *
-     * @param creneau L'entité créneau (peut être null).
-     * @return CreneauResponseDto La réponse du créneau ou null.
-     */
+    public List<ResponseDto> getPlanning(Long technicienId, LocalDate du, LocalDate au) {
+        technicienRepository.findById(technicienId)
+                .orElseThrow(() -> new NotFoundException("Technicien non trouvé"));
+        LocalDateTime debut = du != null ? du.atStartOfDay() : LocalDate.now().atStartOfDay();
+        LocalDateTime fin = au != null ? au.plusDays(1).atStartOfDay() : debut.plusDays(7);
+        if (ChronoUnit.DAYS.between(debut, fin) > MAX_PERIOD_DAYS) {
+            throw new IllegalArgumentException("La période ne peut pas dépasser 3 mois");
+        }
+        return interventionRepository.findByTechnicienIdAndDatePlanifieeBetween(technicienId, debut, fin).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    private InterventionResponseDto toInterventionResponse(Intervention intervention) {
+        return (InterventionResponseDto) toDto(intervention);
+    }
+
     private CreneauResponseDto toCreneauResponse(Creneau creneau) {
-        if (creneau == null) {
-            return null;
-        }
+        if (creneau == null) return null;
         return CreneauResponseDto.builder()
                 .id(creneau.getId())
                 .dateDebut(creneau.getDateDebut())
                 .dateFin(creneau.getDateFin())
                 .build();
+    }
+
+    @Override
+    protected String messageIntrouvable() {
+        return "Intervention non trouvée";
     }
 }

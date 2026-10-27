@@ -25,4 +25,6 @@ public class Client {
     private String telephone;
     @Column(length = 255)
     private String adresse;
+    @Column(length = 120)
+    private String commune;
 }

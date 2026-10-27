@@ -17,4 +17,5 @@ public class ClientRequestDto implements RequestDto {
     private String email;
     private String telephone;
     private String adresse;
+    private String commune;
 }
