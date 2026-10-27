@@ -7,20 +7,13 @@ import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TypeInterventionResponseDto;
 import com.interventionTerrain.interventionTerrain.repository.ClientRepository;
 import com.interventionTerrain.interventionTerrain.repository.CreneauRepository;
-import com.interventionTerrain.interventionTerrain.entity.Client;
-import com.interventionTerrain.interventionTerrain.entity.Creneau;
-import com.interventionTerrain.interventionTerrain.entity.InterventionCreneaux;
-import com.interventionTerrain.interventionTerrain.entity.InterventionTechnicien;
-import com.interventionTerrain.interventionTerrain.entity.Technicien;
-import com.interventionTerrain.interventionTerrain.entity.TypeIntervention;
+import com.interventionTerrain.interventionTerrain.entity.*;
 import com.interventionTerrain.interventionTerrain.dto.InterventionRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.InterventionResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienResponseDto;
 import com.interventionTerrain.interventionTerrain.exception.NotFoundException;
-import com.interventionTerrain.interventionTerrain.repository.InterventionCreneauxRepository;
-import com.interventionTerrain.interventionTerrain.repository.InterventionTechnicienRepository;
-import com.interventionTerrain.interventionTerrain.repository.TechnicienRepository;
-import com.interventionTerrain.interventionTerrain.repository.TypeInterventionRepository;
+import com.interventionTerrain.interventionTerrain.exception.ParametresInvalidesException;
+import com.interventionTerrain.interventionTerrain.repository.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -33,14 +26,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
-import com.interventionTerrain.interventionTerrain.entity.Intervention;
-import com.interventionTerrain.interventionTerrain.repository.InterventionRepository;
 
 @Service
 public class InterventionService extends AbstractCrudService {
 
-    private static final String STATUT_PLANIFIEE = "PLANIFIEE";
+    private static final String STATUT_INITIAL = "PLANIFIEE";
     private static final Set<String> STATUTS_VALIDES = Set.of("PLANIFIEE", "EN_COURS", "TERMINEE", "ECHOUEE", "ANNULEE");
     private static final long MAX_PERIOD_DAYS = 90;
 
@@ -51,6 +43,9 @@ public class InterventionService extends AbstractCrudService {
     private final CreneauRepository creneauRepository;
     private final InterventionTechnicienRepository interventionTechnicienRepository;
     private final InterventionCreneauxRepository interventionCreneauxRepository;
+    private final HistoriqueStatutRepository historiqueStatutRepository;
+    private final TechnicienCompetenceRepository technicienCompetenceRepository;
+    private final StatutRepository statutRepository;
     private final TechnicienService technicienService;
 
     public InterventionService(InterventionRepository interventionRepository,
@@ -60,6 +55,9 @@ public class InterventionService extends AbstractCrudService {
                                CreneauRepository creneauRepository,
                                InterventionTechnicienRepository interventionTechnicienRepository,
                                InterventionCreneauxRepository interventionCreneauxRepository,
+                               HistoriqueStatutRepository historiqueStatutRepository,
+                               TechnicienCompetenceRepository technicienCompetenceRepository,
+                               StatutRepository statutRepository,
                                TechnicienService technicienService) {
         super(interventionRepository);
         this.interventionRepository = interventionRepository;
@@ -69,13 +67,16 @@ public class InterventionService extends AbstractCrudService {
         this.creneauRepository = creneauRepository;
         this.interventionTechnicienRepository = interventionTechnicienRepository;
         this.interventionCreneauxRepository = interventionCreneauxRepository;
+        this.historiqueStatutRepository = historiqueStatutRepository;
+        this.technicienCompetenceRepository = technicienCompetenceRepository;
+        this.statutRepository = statutRepository;
         this.technicienService = technicienService;
     }
 
     public Intervention toEntity(InterventionRequestDto interventionRequest, TypeIntervention typeIntervention, Client client) {
         return Intervention.builder()
                 .datePlanifiee(interventionRequest.getDatePlanifiee())
-                .statut(STATUT_PLANIFIEE)
+                .statut(interventionRequest.getStatut() != null ? interventionRequest.getStatut() : STATUT_INITIAL)
                 .commentaire(interventionRequest.getCommentaire())
                 .reference(interventionRequest.getReference())
                 .typeIntervention(typeIntervention)
@@ -137,6 +138,9 @@ public class InterventionService extends AbstractCrudService {
             throw new IllegalArgumentException("Le créneau doit être dans le futur");
         }
 
+        verifierCompetencesTechnicien(technicien, typeIntervention, interventionRequest.getDatePlanifiee().toLocalDate());
+        verifierChevauchement(technicien, creneau, null);
+
         Intervention intervention = toEntity(interventionRequest, typeIntervention, client);
         intervention = interventionRepository.save(intervention);
 
@@ -151,6 +155,7 @@ public class InterventionService extends AbstractCrudService {
                 .creneau(creneau)
                 .build());
 
+        enregistrerHistorique(intervention, intervention.getStatut(), "SYSTEM");
         return toDto(intervention);
     }
 
@@ -160,7 +165,7 @@ public class InterventionService extends AbstractCrudService {
         Intervention intervention = interventionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
 
-        if (!STATUT_PLANIFIEE.equals(intervention.getStatut())) {
+        if (!STATUT_INITIAL.equals(intervention.getStatut())) {
             throw new IllegalStateException("Impossible de modifier une intervention qui n'est pas PLANIFIEE");
         }
 
@@ -178,6 +183,9 @@ public class InterventionService extends AbstractCrudService {
         if (!creneau.getDateFin().isAfter(creneau.getDateDebut())) {
             throw new IllegalArgumentException("L'heure de fin doit être postérieure à l'heure de début");
         }
+
+        verifierCompetencesTechnicien(technicien, typeIntervention, interventionRequest.getDatePlanifiee().toLocalDate());
+        verifierChevauchement(technicien, creneau, id);
 
         intervention.setDatePlanifiee(interventionRequest.getDatePlanifiee());
         intervention.setTypeIntervention(typeIntervention);
@@ -208,7 +216,7 @@ public class InterventionService extends AbstractCrudService {
         Intervention intervention = interventionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
 
-        if (!STATUT_PLANIFIEE.equals(intervention.getStatut())) {
+        if (!STATUT_INITIAL.equals(intervention.getStatut())) {
             throw new IllegalStateException("Seules les interventions PLANIFIEE peuvent être supprimées");
         }
 
@@ -251,7 +259,7 @@ public class InterventionService extends AbstractCrudService {
             resultats = interventionRepository.findByDatePlanifieeBetween(debut, fin);
         }
         List<ResponseDto> dtos = resultats.stream().map(this::toDto).toList();
-        return new org.springframework.data.domain.PageImpl<>(dtos, pageable, dtos.size());
+        return new PageImpl<>(dtos, pageable, dtos.size());
     }
 
     public List<ResponseDto> getPlanning(Long technicienId, LocalDate du, LocalDate au) {
@@ -267,8 +275,127 @@ public class InterventionService extends AbstractCrudService {
                 .toList();
     }
 
-    private InterventionResponseDto toInterventionResponse(Intervention intervention) {
-        return (InterventionResponseDto) toDto(intervention);
+    public void verifierCompetencesTechnicien(Technicien technicien, TypeIntervention typeIntervention, LocalDate dateIntervention) {
+        List<Long> competencesRequises = typeInterventionRepository.findCompetenceIdsByTypeInterventionId(typeIntervention.getId());
+        if (competencesRequises == null || competencesRequises.isEmpty()) {
+            return;
+        }
+
+        List<Long> competencesPossedees = technicienCompetenceRepository.findByTechnicienId(technicien.getId()).stream()
+                .filter(tc -> tc.getDateExpiration() == null || !tc.getDateExpiration().isBefore(dateIntervention))
+                .map(tc -> tc.getCompetence().getId())
+                .toList();
+
+        List<Long> competencesManquantes = competencesRequises.stream()
+                .filter(id -> !competencesPossedees.contains(id))
+                .toList();
+
+        if (!competencesManquantes.isEmpty()) {
+            throw new ParametresInvalidesException("Technicien non qualifié pour ce type d'intervention. " +
+                    "Compétences manquantes ou expirées : " + competencesManquantes);
+        }
+    }
+
+    public void verifierChevauchement(Technicien technicien, Creneau creneau, Long interventionIdAExclure) {
+        List<Intervention> interventionsDuTechnicien = interventionRepository.findByTechnicienId(technicien.getId());
+        for (Intervention intervention : interventionsDuTechnicien) {
+            if (Objects.equals(intervention.getId(), interventionIdAExclure)) {
+                continue;
+            }
+            if (!"ANNULEE".equals(intervention.getStatut())) {
+                Creneau c = interventionCreneauxRepository.findByInterventionId(intervention.getId())
+                        .stream().findFirst().map(InterventionCreneaux::getCreneau).orElse(null);
+                if (c != null && creneau.getDateDebut().isBefore(c.getDateFin()) && creneau.getDateFin().isAfter(c.getDateDebut())) {
+                    throw new IllegalStateException("Chevauchement de créneau avec l'intervention " + intervention.getId()
+                            + " (créneau " + c.getDateDebut() + " - " + c.getDateFin() + ")");
+                }
+            }
+        }
+    }
+
+    @Transactional
+    public Intervention mettreAJourStatut(Long interventionId, String nouveauStatut) {
+        Intervention intervention = interventionRepository.findById(interventionId)
+                .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
+        String ancienStatut = intervention.getStatut() == null ? STATUT_INITIAL : intervention.getStatut();
+        if (!STATUTS_VALIDES.contains(nouveauStatut)) {
+            throw new ParametresInvalidesException("Statut inconnu : " + nouveauStatut);
+        }
+        if (!transitionAutorisee(ancienStatut, nouveauStatut)) {
+            throw new IllegalStateException("Transition de statut invalide de '" + ancienStatut + "' vers '" + nouveauStatut
+                    + "'. Statuts atteignables : " + statutsAtteignables(ancienStatut));
+        }
+        intervention.setStatut(nouveauStatut);
+        interventionRepository.save(intervention);
+        enregistrerHistorique(intervention, nouveauStatut, "SYSTEM");
+        return intervention;
+    }
+
+    @Transactional
+    public Intervention creerInterventionDeReprise(Long interventionId, LocalDateTime nouvelleDatePlanifiee) {
+        Intervention origine = interventionRepository.findById(interventionId)
+                .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
+
+        if (!"ECHOUEE".equals(origine.getStatut())) {
+            throw new IllegalStateException("Une intervention de reprise n'est autorisée que pour une intervention en statut ECHOUEE");
+        }
+
+        if (interventionRepository.findByReference(origine.getReference()).stream()
+                .anyMatch(i -> !Objects.equals(i.getId(), origine.getId()) && i.getReference() != null
+                        && i.getReference().startsWith(origine.getReference() + "/REPRISE-"))) {
+            throw new IllegalStateException("Une reprise existe déjà pour cette intervention");
+        }
+
+        String referenceReprise = origine.getReference() + "/REPRISE-" + (System.currentTimeMillis() % 100000);
+        Intervention reprise = Intervention.builder()
+                .client(origine.getClient())
+                .typeIntervention(origine.getTypeIntervention())
+                .datePlanifiee(nouvelleDatePlanifiee)
+                .statut(STATUT_INITIAL)
+                .commentaire("Reprise de l'intervention " + origine.getId())
+                .reference(referenceReprise)
+                .build();
+        interventionRepository.save(reprise);
+        return reprise;
+    }
+
+    private boolean transitionAutorisee(String ancienStatut, String nouveauStatut) {
+        if (!STATUTS_VALIDES.contains(ancienStatut) || !STATUTS_VALIDES.contains(nouveauStatut)) {
+            return false;
+        }
+        if ("PLANIFIEE".equals(ancienStatut)) {
+            return "EN_COURS".equals(nouveauStatut) || "TERMINEE".equals(nouveauStatut)
+                    || "ECHOUEE".equals(nouveauStatut) || "ANNULEE".equals(nouveauStatut);
+        }
+        if ("EN_COURS".equals(ancienStatut)) {
+            return "TERMINEE".equals(nouveauStatut) || "ECHOUEE".equals(nouveauStatut);
+        }
+        return false;
+    }
+
+    private List<String> statutsAtteignables(String ancienStatut) {
+        if ("PLANIFIEE".equals(ancienStatut)) {
+            return List.of("EN_COURS", "TERMINEE", "ECHOUEE", "ANNULEE");
+        }
+        if ("EN_COURS".equals(ancienStatut)) {
+            return List.of("TERMINEE", "ECHOUEE");
+        }
+        return List.of();
+    }
+
+    private void enregistrerHistorique(Intervention intervention, String statutLibelle, String auteur) {
+        Statut statut = statutRepository.findByLibelleIgnoreCase(statutLibelle)
+                .orElseGet(() -> {
+                    Statut s = new Statut();
+                    s.setLibelle(statutLibelle);
+                    return statutRepository.save(s);
+                });
+        HistoriqueStatut historique = new HistoriqueStatut();
+        historique.setStatut(statut);
+        historique.setAuteur(auteur);
+        historique.setIntervention(intervention);
+        historique.setDateChangement(LocalDateTime.now());
+        historiqueStatutRepository.save(historique);
     }
 
     private CreneauResponseDto toCreneauResponse(Creneau creneau) {

@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/interventions")
@@ -50,5 +51,17 @@ public class InterventionController {
     @DeleteMapping("/{id}")
     public Response<ResponseDto> delete(@PathVariable Long id) throws Throwable {
         return new Response<>(interventionService.delete(id));
+    }
+
+    @PostMapping("/{id}/statut")
+    public Response<ResponseDto> mettreAJourStatut(@PathVariable Long id,
+                                                   @RequestParam String nouveauStatut) {
+        return new Response<>(interventionService.toDto(interventionService.mettreAJourStatut(id, nouveauStatut)));
+    }
+
+    @PostMapping("/{id}/reprise")
+    public Response<ResponseDto> creerReprise(@PathVariable Long id,
+                                              @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) LocalDateTime datePlanifiee) {
+        return new Response<>(interventionService.toDto(interventionService.creerInterventionDeReprise(id, datePlanifiee)));
     }
 }

@@ -6,9 +6,12 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import com.interventionTerrain.interventionTerrain.entity.TypeIntervention;
 
+import java.util.List;
+
 @Repository
 public interface TypeInterventionRepository extends JpaRepository<TypeIntervention, Long> {
 
-    @Query("SELECT COUNT(ti) > 0 FROM TypeIntervention ti WHERE ti.id IN (SELECT tc.competence.id FROM TechnicienCompetence tc WHERE tc.competence.id = :competenceId)")
-    boolean existsByCompetenceId(@Param("competenceId") Long competenceId);
+    @Query(value = "SELECT DISTINCT tic.competence_id FROM type_intervention_competence tic "
+            + "WHERE tic.type_intervention_id = :typeInterventionId", nativeQuery = true)
+    List<Long> findCompetenceIdsByTypeInterventionId(@Param("typeInterventionId") Long typeInterventionId);
 }

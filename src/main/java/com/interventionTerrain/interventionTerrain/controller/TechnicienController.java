@@ -1,5 +1,6 @@
 package com.interventionTerrain.interventionTerrain.controller;
 
+import com.interventionTerrain.interventionTerrain.dto.CompetenceRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienCompetenceResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienRequestDto;
@@ -59,6 +60,13 @@ public class TechnicienController {
     @GetMapping("/{id}/competences")
     public Response<TechnicienCompetenceResponseDto> getCompetences(@PathVariable Long id) throws Throwable {
         return new Response<>(technicienService.getCompetencesByTechnicien(id));
+    }
+
+    @PostMapping("/{id}/competences")
+    public Response<TechnicienCompetenceResponseDto> associerCompetence(
+            @PathVariable Long id,
+            @Valid @RequestBody CompetenceRequestDto competenceRequest) {
+        return new Response<>(technicienService.associerCompetence(id, competenceRequest));
     }
 
     @GetMapping("/{id}/planning")

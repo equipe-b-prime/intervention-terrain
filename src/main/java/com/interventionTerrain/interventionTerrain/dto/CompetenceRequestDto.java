@@ -2,9 +2,8 @@ package com.interventionTerrain.interventionTerrain.dto;
 
 import lombok.*;
 
-/**
- * Requête de création ou de modification d'une compétence.
- */
+import java.time.LocalDate;
+
 @Getter
 @Setter
 @Builder
@@ -14,4 +13,6 @@ public class CompetenceRequestDto implements RequestDto {
     private Long id;
     private String nom;
     private String description;
+    private LocalDate dateObtention;
+    private LocalDate dateExpiration;
 }

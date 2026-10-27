@@ -39,4 +39,6 @@ public interface InterventionRepository extends JpaRepository<Intervention, Long
 
     @Query("SELECT COUNT(it) > 0 FROM InterventionTechnicien it WHERE it.technicien.id = :technicienId")
     boolean existsByTechnicienId(@Param("technicienId") Long technicienId);
+
+    List<Intervention> findByReference(String reference);
 }
