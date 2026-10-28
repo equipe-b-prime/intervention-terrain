@@ -48,4 +48,6 @@ public interface InterventionRepository extends JpaRepository<Intervention, Long
     boolean existsByTechnicienId(@Param("technicienId") Long technicienId);
 
     List<Intervention> findByReference(String reference);
+
+    boolean existsByCommentaire(String commentaire);
 }

@@ -340,9 +340,7 @@ public class InterventionService extends AbstractCrudService {
             throw new IllegalStateException("Une intervention de reprise n'est autorisée que pour une intervention en statut ECHOUEE");
         }
 
-        if (interventionRepository.findByReference(origine.getReference()).stream()
-                .anyMatch(i -> !Objects.equals(i.getId(), origine.getId()) && i.getReference() != null
-                        && i.getReference().startsWith(origine.getReference() + "/REPRISE-"))) {
+        if (interventionRepository.existsByCommentaire("Reprise de l'intervention " + origine.getId())) {
             throw new IllegalStateException("Une reprise existe déjà pour cette intervention");
         }
 
