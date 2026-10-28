@@ -4,12 +4,23 @@ import com.interventionTerrain.interventionTerrain.dto.AgenceResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.CommuneResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.CompetenceRequestDto;
 import com.interventionTerrain.interventionTerrain.dto.CompetenceResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.DisponiblesResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.GroupeAgenceDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienCompetenceResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.TechnicienDisponibleDto;
 import com.interventionTerrain.interventionTerrain.entity.Competence;
+import com.interventionTerrain.interventionTerrain.entity.Creneau;
 import com.interventionTerrain.interventionTerrain.entity.Equipe;
+import com.interventionTerrain.interventionTerrain.entity.Intervention;
+import com.interventionTerrain.interventionTerrain.entity.InterventionCreneaux;
 import com.interventionTerrain.interventionTerrain.entity.TechnicienCompetence;
+import com.interventionTerrain.interventionTerrain.entity.TechnicienDisponibleView;
+import com.interventionTerrain.interventionTerrain.entity.TypeIntervention;
 import com.interventionTerrain.interventionTerrain.repository.CompetenceRepository;
 import com.interventionTerrain.interventionTerrain.repository.EquipeRepository;
+import com.interventionTerrain.interventionTerrain.repository.InterventionCreneauxRepository;
+import com.interventionTerrain.interventionTerrain.repository.InterventionRepository;
+import com.interventionTerrain.interventionTerrain.repository.TypeInterventionRepository;
 import com.interventionTerrain.interventionTerrain.dto.EquipeResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.RequestDto;
 import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
@@ -27,7 +38,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import com.interventionTerrain.interventionTerrain.entity.Technicien;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienRepository;
@@ -39,16 +54,25 @@ public class TechnicienService extends AbstractCrudService {
     private final EquipeRepository equipeRepository;
     private final CompetenceRepository competenceRepository;
     private final TechnicienCompetenceRepository technicienCompetenceRepository;
+    private final InterventionRepository interventionRepository;
+    private final InterventionCreneauxRepository interventionCreneauxRepository;
+    private final TypeInterventionRepository typeInterventionRepository;
 
     public TechnicienService(TechnicienRepository technicienRepository,
                              EquipeRepository equipeRepository,
                              CompetenceRepository competenceRepository,
-                             TechnicienCompetenceRepository technicienCompetenceRepository) {
+                             TechnicienCompetenceRepository technicienCompetenceRepository,
+                             InterventionRepository interventionRepository,
+                             InterventionCreneauxRepository interventionCreneauxRepository,
+                             TypeInterventionRepository typeInterventionRepository) {
         super(technicienRepository);
         this.technicienRepository = technicienRepository;
         this.equipeRepository = equipeRepository;
         this.competenceRepository = competenceRepository;
         this.technicienCompetenceRepository = technicienCompetenceRepository;
+        this.interventionRepository = interventionRepository;
+        this.interventionCreneauxRepository = interventionCreneauxRepository;
+        this.typeInterventionRepository = typeInterventionRepository;
     }
 
     public Technicien toEntity(TechnicienRequestDto technicienRequest, Equipe equipe) {
@@ -219,6 +243,82 @@ public class TechnicienService extends AbstractCrudService {
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
         return toDto(entity);
+    }
+
+    public DisponiblesResponseDto getDisponibles(LocalDateTime debut, LocalDateTime fin, String typeNom) {
+        TypeIntervention type = typeInterventionRepository.findByNomIgnoreCase(typeNom)
+                .orElseThrow(() -> new NotFoundException("Type d'intervention non trouvé : " + typeNom));
+
+        List<Long> competencesRequises = typeInterventionRepository
+                .findCompetenceIdsByTypeInterventionId(type.getId());
+        LocalDate dateIntervention = debut.toLocalDate();
+
+        List<TechnicienDisponibleView> dispo = technicienRepository.findAllDisponibles().stream()
+                .filter(t -> possedeCompetences(t.getTechnicienId(), competencesRequises, dateIntervention))
+                .filter(t -> estLibreSurCreneau(t.getTechnicienId(), debut, fin))
+                .sorted((a, b) -> a.getNom().toLowerCase().compareTo(b.getNom().toLowerCase()))
+                .toList();
+
+        if (dispo.isEmpty()) {
+            return DisponiblesResponseDto.builder()
+                    .agences(List.of())
+                    .raisonFiltrage("Aucun technicien compétent et disponible sur le créneau "
+                            + debut + " - " + fin + " pour le type " + typeNom)
+                    .build();
+        }
+
+        Map<String, List<TechnicienDisponibleView>> parAgence = new LinkedHashMap<>();
+        dispo.forEach(t -> parAgence
+                .computeIfAbsent(t.getAgenceNom(), k -> new ArrayList<>())
+                .add(t));
+
+        List<GroupeAgenceDto> agences = parAgence.entrySet().stream()
+                .map(e -> GroupeAgenceDto.builder()
+                        .agenceNom(e.getKey())
+                        .techniciens(e.getValue().stream()
+                                .map(t -> TechnicienDisponibleDto.builder()
+                                        .id(t.getTechnicienId())
+                                        .nom(t.getNom())
+                                        .prenom(t.getPrenom())
+                                        .matricule(t.getMatricule())
+                                        .chargeJour(t.getNbInterventionsJour() != null
+                                                ? t.getNbInterventionsJour() : 0)
+                                        .build())
+                                .toList())
+                        .build())
+                .toList();
+
+        return DisponiblesResponseDto.builder()
+                .agences(agences)
+                .raisonFiltrage(null)
+                .build();
+    }
+
+    private boolean possedeCompetences(Long technicienId, List<Long> requises, LocalDate dateIntervention) {
+        if (requises == null || requises.isEmpty()) {
+            return true;
+        }
+        List<Long> possedees = technicienCompetenceRepository.findByTechnicienId(technicienId).stream()
+                .filter(tc -> tc.getDateExpiration() == null || !tc.getDateExpiration().isBefore(dateIntervention))
+                .map(tc -> tc.getCompetence().getId())
+                .toList();
+        return possedees.containsAll(requises);
+    }
+
+    private boolean estLibreSurCreneau(Long technicienId, LocalDateTime debut, LocalDateTime fin) {
+        List<Intervention> interventions = interventionRepository.findByTechnicienId(technicienId);
+        for (Intervention i : interventions) {
+            if ("ANNULEE".equals(i.getStatut())) {
+                continue;
+            }
+            Creneau c = interventionCreneauxRepository.findByInterventionId(i.getId())
+                    .stream().findFirst().map(InterventionCreneaux::getCreneau).orElse(null);
+            if (c != null && c.getDateDebut() != null && c.getDateFin() != null
+                    && debut.isBefore(c.getDateFin()) && fin.isAfter(c.getDateDebut())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

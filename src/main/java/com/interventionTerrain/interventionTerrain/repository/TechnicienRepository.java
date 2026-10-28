@@ -8,12 +8,16 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 import com.interventionTerrain.interventionTerrain.entity.Technicien;
+import com.interventionTerrain.interventionTerrain.entity.TechnicienDisponibleView;
 
 @Repository
 public interface TechnicienRepository extends JpaRepository<Technicien, Long> {
 
     @Query("SELECT t FROM Technicien t WHERE t.equipe.agence.id = :agenceId")
     List<Technicien> findByAgenceId(@Param("agenceId") Long agenceId);
+
+    @Query("SELECT v FROM TechnicienDisponibleView v")
+    List<TechnicienDisponibleView> findAllDisponibles();
 
     boolean existsByMatriculeIgnoreCase(String matricule);
 

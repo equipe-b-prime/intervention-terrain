@@ -1,18 +1,16 @@
 package com.interventionTerrain.interventionTerrain.service;
 
-import com.interventionTerrain.interventionTerrain.dto.AgenceRequestDto;
-import com.interventionTerrain.interventionTerrain.dto.AgenceResponseDto;
-import com.interventionTerrain.interventionTerrain.dto.CommuneResponseDto;
-import com.interventionTerrain.interventionTerrain.dto.RequestDto;
-import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
-import com.interventionTerrain.interventionTerrain.dto.TechnicienEffectifResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.*;
 import com.interventionTerrain.interventionTerrain.exception.DoublonRessourceException;
 import com.interventionTerrain.interventionTerrain.exception.NotFoundException;
 import com.interventionTerrain.interventionTerrain.exception.RessourceUtiliseeException;
 import com.interventionTerrain.interventionTerrain.repository.CommuneRepository;
+import com.interventionTerrain.interventionTerrain.repository.InterventionCreneauxRepository;
+import com.interventionTerrain.interventionTerrain.repository.InterventionRepository;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienRepository;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienCompetenceRepository;
 import com.interventionTerrain.interventionTerrain.entity.Commune;
+import com.interventionTerrain.interventionTerrain.entity.Creneau;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,7 +20,10 @@ import org.springframework.stereotype.Service;
 import com.interventionTerrain.interventionTerrain.entity.Agence;
 import com.interventionTerrain.interventionTerrain.repository.AgenceRepository;
 
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,16 +35,25 @@ public class AgenceService extends AbstractCrudService {
     private final CommuneRepository communeRepository;
     private final TechnicienRepository technicienRepository;
     private final TechnicienCompetenceRepository technicienCompetenceRepository;
+    private final InterventionRepository interventionRepository;
+    private final InterventionCreneauxRepository interventionCreneauxRepository;
+    private final TauxReussiteService tauxReussiteService;
 
     public AgenceService(AgenceRepository agenceRepository,
                          CommuneRepository communeRepository,
                          TechnicienRepository technicienRepository,
-                         TechnicienCompetenceRepository technicienCompetenceRepository) {
+                         TechnicienCompetenceRepository technicienCompetenceRepository,
+                         InterventionRepository interventionRepository,
+                         InterventionCreneauxRepository interventionCreneauxRepository,
+                         TauxReussiteService tauxReussiteService) {
         super(agenceRepository);
         this.agenceRepository = agenceRepository;
         this.communeRepository = communeRepository;
         this.technicienRepository = technicienRepository;
         this.technicienCompetenceRepository = technicienCompetenceRepository;
+        this.interventionRepository = interventionRepository;
+        this.interventionCreneauxRepository = interventionCreneauxRepository;
+        this.tauxReussiteService = tauxReussiteService;
     }
 
     public Agence toEntity(AgenceRequestDto agenceRequest, Commune commune) {
@@ -140,6 +150,62 @@ public class AgenceService extends AbstractCrudService {
                         .nbCompetencesValides(validesParTechnicien.getOrDefault(t.getId(), 0L))
                         .build())
                 .toList();
+    }
+
+    public ChargeAgenceDto getCharge(Long agenceId, LocalDate du, LocalDate au) {
+        Agence agence = agenceRepository.findById(agenceId)
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        LocalDateTime debut = du != null ? du.atStartOfDay() : LocalDateTime.now().minusDays(30);
+        LocalDateTime fin = au != null ? au.plusDays(1).atStartOfDay() : LocalDateTime.now().plusDays(30);
+
+        List<ChargeTechDto> techs = new ArrayList<>();
+        long totalInterventions = 0;
+        double totalHeures = 0;
+
+        for (com.interventionTerrain.interventionTerrain.entity.Technicien t : technicienRepository.findByAgenceId(agenceId)) {
+            List<com.interventionTerrain.interventionTerrain.entity.Intervention> interventions = interventionRepository
+                    .findByTechnicienIdAndDatePlanifieeBetweenNonAnnulee(t.getId(), debut, fin);
+
+            double heuresTech = 0;
+            for (com.interventionTerrain.interventionTerrain.entity.Intervention i : interventions) {
+                heuresTech += interventionCreneauxRepository.findByInterventionId(i.getId()).stream()
+                        .mapToDouble(ic -> {
+                            Creneau c = ic.getCreneau();
+                            if (c != null && c.getDateDebut() != null && c.getDateFin() != null) {
+                                return Duration.between(c.getDateDebut(), c.getDateFin()).toMinutes() / 60.0;
+                            }
+                            return 0;
+                        }).sum();
+            }
+
+            heuresTech = Math.round(heuresTech * 100.0) / 100.0;
+            totalInterventions += interventions.size();
+            totalHeures += heuresTech;
+
+            techs.add(ChargeTechDto.builder()
+                    .id(t.getId())
+                    .nom(t.getNom())
+                    .prenom(t.getPrenom())
+                    .nbInterventions(interventions.size())
+                    .totalHeures(heuresTech)
+                    .build());
+        }
+
+        totalHeures = Math.round(totalHeures * 100.0) / 100.0;
+
+        return ChargeAgenceDto.builder()
+                .agenceId(agenceId)
+                .agenceNom(agence.getNom())
+                .techniciens(techs)
+                .totalInterventions(totalInterventions)
+                .totalHeures(totalHeures)
+                .build();
+    }
+
+    public TauxReussiteGlobalDto getTauxReussite(Long agenceId, String mois) {
+        agenceRepository.findById(agenceId)
+                .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
+        return tauxReussiteService.getTauxReussite(agenceId, mois);
     }
 
     public ResponseDto getByNom(String nom) {

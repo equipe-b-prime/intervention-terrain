@@ -1,12 +1,16 @@
 package com.interventionTerrain.interventionTerrain.controller;
 
 import com.interventionTerrain.interventionTerrain.dto.AgenceRequestDto;
+import com.interventionTerrain.interventionTerrain.dto.ChargeAgenceDto;
 import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
+import com.interventionTerrain.interventionTerrain.dto.TauxReussiteGlobalDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienEffectifResponseDto;
 import com.interventionTerrain.interventionTerrain.service.AgenceService;
 import com.interventionTerrain.interventionTerrain.utils.response.Response;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/agences")
@@ -53,5 +57,18 @@ public class AgenceController {
     @GetMapping("/{id}/techniciens")
     public Response<TechnicienEffectifResponseDto> getEffectif(@PathVariable Long id) throws Throwable {
         return new Response<>(agenceService.getEffectif(id));
+    }
+
+    @GetMapping("/{id}/charge")
+    public Response<ChargeAgenceDto> getCharge(@PathVariable Long id,
+                                               @RequestParam(required = false) LocalDate du,
+                                               @RequestParam(required = false) LocalDate au) throws Throwable {
+        return new Response<>(agenceService.getCharge(id, du, au));
+    }
+
+    @GetMapping("/{id}/taux-reussite")
+    public Response<TauxReussiteGlobalDto> getTauxReussite(@PathVariable Long id,
+                                                           @RequestParam String mois) throws Throwable {
+        return new Response<>(agenceService.getTauxReussite(id, mois));
     }
 }

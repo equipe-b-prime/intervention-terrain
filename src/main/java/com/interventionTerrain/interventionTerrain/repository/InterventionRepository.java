@@ -35,6 +35,13 @@ public interface InterventionRepository extends JpaRepository<Intervention, Long
                                                                   @Param("debut") java.time.LocalDateTime debut,
                                                                   @Param("fin") java.time.LocalDateTime fin);
 
+    @Query("SELECT it.intervention FROM InterventionTechnicien it WHERE it.technicien.id = :technicienId " +
+           "AND it.intervention.statut <> 'ANNULEE' " +
+           "AND it.intervention.datePlanifiee BETWEEN :debut AND :fin ORDER BY it.intervention.datePlanifiee ASC")
+    List<Intervention> findByTechnicienIdAndDatePlanifieeBetweenNonAnnulee(@Param("technicienId") Long technicienId,
+                                                                            @Param("debut") java.time.LocalDateTime debut,
+                                                                            @Param("fin") java.time.LocalDateTime fin);
+
     boolean existsByClientId(Long clientId);
 
     @Query("SELECT COUNT(it) > 0 FROM InterventionTechnicien it WHERE it.technicien.id = :technicienId")

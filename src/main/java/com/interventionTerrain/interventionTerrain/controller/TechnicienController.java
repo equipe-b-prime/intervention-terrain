@@ -1,6 +1,7 @@
 package com.interventionTerrain.interventionTerrain.controller;
 
 import com.interventionTerrain.interventionTerrain.dto.CompetenceRequestDto;
+import com.interventionTerrain.interventionTerrain.dto.DisponiblesResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.ResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienCompetenceResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TechnicienRequestDto;
@@ -8,9 +9,11 @@ import com.interventionTerrain.interventionTerrain.service.InterventionService;
 import com.interventionTerrain.interventionTerrain.service.TechnicienService;
 import com.interventionTerrain.interventionTerrain.utils.response.Response;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/techniciens")
@@ -74,5 +77,13 @@ public class TechnicienController {
                                              @RequestParam(required = false) LocalDate du,
                                              @RequestParam(required = false) LocalDate au) throws Throwable {
         return new Response<>(interventionService.getPlanning(id, du, au));
+    }
+
+    @GetMapping("/disponibles")
+    public Response<DisponiblesResponseDto> getDisponibles(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime debut,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fin,
+            @RequestParam String type) throws Throwable {
+        return new Response<>(technicienService.getDisponibles(debut, fin, type));
     }
 }
