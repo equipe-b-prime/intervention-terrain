@@ -28,7 +28,7 @@ public class CompetenceService extends AbstractCrudService {
 
     public Competence toEntity(CompetenceRequestDto competenceRequest) {
         return Competence.builder()
-                .nom(competenceRequest.getNom())
+                .libelle(competenceRequest.getLibelle())
                 .description(competenceRequest.getDescription())
                 .build();
     }
@@ -38,7 +38,7 @@ public class CompetenceService extends AbstractCrudService {
         Competence competence = (Competence) entity;
         return CompetenceResponseDto.builder()
                 .id(competence.getId())
-                .nom(competence.getNom())
+                .libelle(competence.getLibelle())
                 .description(competence.getDescription())
                 .build();
     }
@@ -50,26 +50,31 @@ public class CompetenceService extends AbstractCrudService {
         return competenceRepository.findAll(pageable).map(this::toDto);
     }
 
-    @Override
     public ResponseDto create(RequestDto requestDto) {
         CompetenceRequestDto competenceRequest = (CompetenceRequestDto) requestDto;
-        if (competenceRepository.existsByNomIgnoreCase(competenceRequest.getNom())) {
+        competenceRequest.setLibelle(competenceRequest.getLibelle());
+        competenceRequest.setDescription(competenceRequest.getDescription());
+        if (competenceRepository.existsByLibelleIgnoreCase(competenceRequest.getLibelle())) {
             throw new DoublonRessourceException("Une compétence nommée '"
-                    + competenceRequest.getNom() + "' existe déjà");
+                    + competenceRequest.getLibelle() + "' existe déjà");
         }
+
         return toDto(competenceRepository.save(toEntity(competenceRequest)));
     }
 
     @Override
     public ResponseDto update(Long id, RequestDto requestDto) {
         CompetenceRequestDto competenceRequest = (CompetenceRequestDto) requestDto;
+        competenceRequest.setLibelle(competenceRequest.getLibelle());
+        competenceRequest.setDescription(competenceRequest.getDescription());
         Competence competence = competenceRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
-        if (competenceRepository.existsByNomIgnoreCaseAndIdNot(competenceRequest.getNom(), id)) {
+        if (competenceRepository.existsByLibelleIgnoreCaseAndIdNot(competenceRequest.getLibelle(), id)) {
             throw new DoublonRessourceException("Une compétence nommée '"
-                    + competenceRequest.getNom() + "' existe déjà");
+                    + competenceRequest.getLibelle() + "' existe déjà");
         }
-        competence.setNom(competenceRequest.getNom());
+        competence.setLibelle(
+                competenceRequest.getLibelle());
         competence.setDescription(competenceRequest.getDescription());
         return toDto(competenceRepository.save(competence));
     }
@@ -87,7 +92,7 @@ public class CompetenceService extends AbstractCrudService {
     }
 
     public ResponseDto getByNom(String nom) {
-        Competence competence = competenceRepository.findByNom(nom)
+        Competence competence = competenceRepository.findByLibelle(nom)
                 .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
         return toDto(competence);
     }

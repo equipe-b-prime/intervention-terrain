@@ -1,7 +1,7 @@
 package com.interventionTerrain.interventionTerrain.entity;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+import java.time.LocalTime;
 /**
  * Represente le creneau de temps pour une intervention
  */
@@ -17,7 +17,7 @@ public class Creneau {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false)
-    private LocalDateTime dateDebut;
+    private LocalTime dateDebut;
     @Column(nullable = false)
-    private LocalDateTime dateFin;
+    private LocalTime dateFin;
 }

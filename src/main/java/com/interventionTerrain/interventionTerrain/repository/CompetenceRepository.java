@@ -11,10 +11,10 @@ import com.interventionTerrain.interventionTerrain.entity.Competence;
 
 @Repository
 public interface CompetenceRepository extends JpaRepository<Competence, Long> {
-    boolean existsByNomIgnoreCase(String nom);
-    boolean existsByNomIgnoreCaseAndIdNot(String nom, Long id);
-    Optional<Competence> findByNom(String nom);
-    List<Competence> findByNomIgnoreCase(String nom);
+    boolean existsByLibelleIgnoreCase(String nom);
+    boolean existsByLibelleIgnoreCaseAndIdNot(String nom, Long id);
+    Optional<Competence> findByLibelle(String nom);
+    List<Competence> findByLibelleIgnoreCase(String nom);
 
     @Query("SELECT COUNT(tc) > 0 FROM TechnicienCompetence tc WHERE tc.competence.id = :competenceId")
     boolean existsTechnicienByCompetenceId(@Param("competenceId") Long competenceId);

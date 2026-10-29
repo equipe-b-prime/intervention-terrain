@@ -124,6 +124,11 @@ public class TechnicienService extends AbstractCrudService {
     @Override
     public ResponseDto create(RequestDto requestDto) {
         TechnicienRequestDto technicienRequest = (TechnicienRequestDto) requestDto;
+        technicienRequest.setNom((technicienRequest.getNom()));
+        technicienRequest.setPrenom((technicienRequest.getPrenom()));
+        technicienRequest.setEmail((technicienRequest.getEmail()));
+        technicienRequest.setTelephone((technicienRequest.getTelephone()));
+        technicienRequest.setMatricule((technicienRequest.getMatricule()));
         if (technicienRepository.existsByMatriculeIgnoreCase(technicienRequest.getMatricule())) {
             throw new DoublonRessourceException("Un technicien portant le matricule '"
                     + technicienRequest.getMatricule() + "' existe déjà");
@@ -136,6 +141,11 @@ public class TechnicienService extends AbstractCrudService {
     @Override
     public ResponseDto update(Long id, RequestDto requestDto) {
         TechnicienRequestDto technicienRequest = (TechnicienRequestDto) requestDto;
+        technicienRequest.setNom((technicienRequest.getNom()));
+        technicienRequest.setPrenom((technicienRequest.getPrenom()));
+        technicienRequest.setEmail((technicienRequest.getEmail()));
+        technicienRequest.setTelephone((technicienRequest.getTelephone()));
+        technicienRequest.setMatricule((technicienRequest.getMatricule()));
         Technicien technicien = technicienRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
         if (!Objects.equals(technicien.getMatricule(), technicienRequest.getMatricule())) {
@@ -177,7 +187,7 @@ public class TechnicienService extends AbstractCrudService {
         return technicienCompetenceRepository.findByTechnicienId(technicienId).stream()
                 .map(link -> TechnicienCompetenceResponseDto.builder()
                         .id(link.getCompetence().getId())
-                        .nom(link.getCompetence().getNom())
+                        .nom(link.getCompetence().getLibelle())
                         .description(link.getCompetence().getDescription())
                         .dateObtention(link.getDateObtention())
                         .dateExpiration(link.getDateExpiration())
@@ -222,7 +232,7 @@ public class TechnicienService extends AbstractCrudService {
         TechnicienCompetence saved = technicienCompetenceRepository.save(link);
         return TechnicienCompetenceResponseDto.builder()
                 .id(saved.getCompetence().getId())
-                .nom(saved.getCompetence().getNom())
+                .nom(saved.getCompetence().getLibelle())
                 .description(saved.getCompetence().getDescription())
                 .dateObtention(saved.getDateObtention())
                 .dateExpiration(saved.getDateExpiration())
@@ -233,7 +243,7 @@ public class TechnicienService extends AbstractCrudService {
     private CompetenceResponseDto toCompetenceResponse(Competence competence) {
         return CompetenceResponseDto.builder()
                 .id(competence.getId())
-                .nom(competence.getNom())
+                .libelle(competence.getLibelle())
                 .description(competence.getDescription())
                 .build();
     }
@@ -313,9 +323,12 @@ public class TechnicienService extends AbstractCrudService {
             }
             Creneau c = interventionCreneauxRepository.findByInterventionId(i.getId())
                     .stream().findFirst().map(InterventionCreneaux::getCreneau).orElse(null);
-            if (c != null && c.getDateDebut() != null && c.getDateFin() != null
-                    && debut.isBefore(c.getDateFin()) && fin.isAfter(c.getDateDebut())) {
-                return false;
+            if (c != null && c.getDateDebut() != null && c.getDateFin() != null) {
+                LocalDateTime debutIntervention = LocalDateTime.of(i.getDatePlanifiee(), c.getDateDebut());
+                LocalDateTime finIntervention = LocalDateTime.of(i.getDatePlanifiee(), c.getDateFin());
+                if (debut.isBefore(finIntervention) && fin.isAfter(debutIntervention)) {
+                    return false;
+                }
             }
         }
         return true;

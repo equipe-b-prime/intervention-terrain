@@ -2,7 +2,7 @@ package com.interventionTerrain.interventionTerrain.dto;
 
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * Réponse contenant les données d'un créneau.
@@ -14,6 +14,6 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class CreneauResponseDto {
     private Long id;
-    private LocalDateTime dateDebut;
-    private LocalDateTime dateFin;
+    private LocalTime dateDebut;
+    private LocalTime dateFin;
 }

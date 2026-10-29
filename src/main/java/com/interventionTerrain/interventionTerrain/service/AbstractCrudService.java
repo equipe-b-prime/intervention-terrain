@@ -49,4 +49,6 @@ public abstract class AbstractCrudService implements CrudService {
     protected String messageIntrouvable() {
         return NOT_FOUND_MESSAGE;
     }
+
+
 }

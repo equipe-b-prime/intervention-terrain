@@ -3,7 +3,7 @@ import com.interventionTerrain.interventionTerrain.entity.Client;
 import com.interventionTerrain.interventionTerrain.entity.TypeIntervention;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 /**
  * Represente les interventions
  */
@@ -19,7 +19,7 @@ public class Intervention {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false)
-    private LocalDateTime datePlanifiee;
+    private LocalDate datePlanifiee;
     @Column(nullable = false, length = 50)
     private String statut;
     @Column(length = 1000)

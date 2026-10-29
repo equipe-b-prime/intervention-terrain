@@ -92,6 +92,8 @@ public class AgenceService extends AbstractCrudService {
     @Override
     public ResponseDto create(RequestDto requestDto) {
         AgenceRequestDto agenceRequest = (AgenceRequestDto) requestDto;
+        agenceRequest.setNom((agenceRequest.getNom()));
+        agenceRequest.setVille((agenceRequest.getVille()));
         if (agenceRepository.existsByNomIgnoreCase(agenceRequest.getNom())) {
             throw new DoublonRessourceException("Une agence nommée '" + agenceRequest.getNom() + "' existe déjà");
         }
@@ -103,6 +105,8 @@ public class AgenceService extends AbstractCrudService {
     @Override
     public ResponseDto update(Long id, RequestDto requestDto) {
         AgenceRequestDto agenceRequest = (AgenceRequestDto) requestDto;
+        agenceRequest.setNom((agenceRequest.getNom()));
+        agenceRequest.setVille((agenceRequest.getVille()));
         Agence agence = agenceRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
         if (agenceRepository.existsByNomIgnoreCaseAndIdNot(agenceRequest.getNom(), id)) {
@@ -110,7 +114,7 @@ public class AgenceService extends AbstractCrudService {
         }
         boolean villeModifiee = !java.util.Objects.equals(agence.getVille(), agenceRequest.getVille());
         if (villeModifiee && technicienRepository.findByAgenceId(id).size() > 0) {
-            throw new IllegalArgumentException("La ville d'une agence est figée dès que des techniciens y sont rattachés");
+            throw new IllegalArgumentException("Impossible de supprimer cette agence car des techniciens y sont rattachés.");
         }
         Commune commune = communeRepository.findById(agenceRequest.getCommuneId())
                 .orElseThrow(() -> new NotFoundException("Commune non trouvée"));
@@ -155,8 +159,8 @@ public class AgenceService extends AbstractCrudService {
     public ChargeAgenceDto getCharge(Long agenceId, LocalDate du, LocalDate au) {
         Agence agence = agenceRepository.findById(agenceId)
                 .orElseThrow(() -> new NotFoundException(messageIntrouvable()));
-        LocalDateTime debut = du != null ? du.atStartOfDay() : LocalDateTime.now().minusDays(30);
-        LocalDateTime fin = au != null ? au.plusDays(1).atStartOfDay() : LocalDateTime.now().plusDays(30);
+        LocalDate debut = du != null ? du : LocalDate.now().minusDays(30);
+        LocalDate fin = au != null ? au : LocalDate.now().plusDays(30);
 
         List<ChargeTechDto> techs = new ArrayList<>();
         long totalInterventions = 0;

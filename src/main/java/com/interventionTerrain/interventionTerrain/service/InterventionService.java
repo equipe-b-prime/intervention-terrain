@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
@@ -73,10 +74,31 @@ public class InterventionService extends AbstractCrudService {
         this.technicienService = technicienService;
     }
 
+    private LocalDateTime toDateTime(LocalDate date, LocalTime time) {
+        return LocalDateTime.of(date, time);
+    }
+
+    private void validerCreneau(LocalDate dateIntervention, Creneau creneau) {
+        if (creneau == null) {
+            throw new IllegalArgumentException("Le créneau est obligatoire");
+        }
+        if (creneau.getDateDebut() == null || creneau.getDateFin() == null) {
+            throw new IllegalArgumentException("Le créneau doit contenir une heure de début et une heure de fin");
+        }
+        if (!creneau.getDateFin().isAfter(creneau.getDateDebut())) {
+            throw new IllegalArgumentException("L'heure de fin doit être postérieure à l'heure de début");
+        }
+
+        LocalDateTime debutCreneau = toDateTime(dateIntervention, creneau.getDateDebut());
+        if (debutCreneau.isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Le créneau doit être dans le futur");
+        }
+    }
+
     public Intervention toEntity(InterventionRequestDto interventionRequest, TypeIntervention typeIntervention, Client client) {
         return Intervention.builder()
                 .datePlanifiee(interventionRequest.getDatePlanifiee())
-                .statut(interventionRequest.getStatut() != null ? interventionRequest.getStatut() : STATUT_INITIAL)
+                .statut(STATUT_INITIAL)
                 .commentaire(interventionRequest.getCommentaire())
                 .reference(interventionRequest.getReference())
                 .typeIntervention(typeIntervention)
@@ -122,6 +144,13 @@ public class InterventionService extends AbstractCrudService {
     public ResponseDto create(RequestDto requestDto) {
         InterventionRequestDto interventionRequest = (InterventionRequestDto) requestDto;
 
+        if (interventionRequest.getDatePlanifiee() == null) {
+            throw new IllegalArgumentException("La date planifiée est obligatoire");
+        }
+        if (interventionRequest.getDatePlanifiee().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("La date planifiée doit être dans le futur");
+        }
+
         TypeIntervention typeIntervention = typeInterventionRepository.findById(interventionRequest.getTypeInterventionId())
                 .orElseThrow(() -> new NotFoundException("Type d'intervention non trouvé"));
         Client client = clientRepository.findById(interventionRequest.getClientId())
@@ -131,15 +160,9 @@ public class InterventionService extends AbstractCrudService {
         Creneau creneau = creneauRepository.findById(interventionRequest.getCreneauId())
                 .orElseThrow(() -> new NotFoundException("Créneau non trouvé"));
 
-        if (!creneau.getDateFin().isAfter(creneau.getDateDebut())) {
-            throw new IllegalArgumentException("L'heure de fin doit être postérieure à l'heure de début");
-        }
-        if (creneau.getDateDebut().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Le créneau doit être dans le futur");
-        }
-
-        verifierCompetencesTechnicien(technicien, typeIntervention, interventionRequest.getDatePlanifiee().toLocalDate());
-        verifierChevauchement(technicien, creneau, null);
+        validerCreneau(interventionRequest.getDatePlanifiee(), creneau);
+        verifierCompetencesTechnicien(technicien, typeIntervention, interventionRequest.getDatePlanifiee());
+        verifierChevauchement(technicien, creneau, null, interventionRequest.getDatePlanifiee());
 
         Intervention intervention = toEntity(interventionRequest, typeIntervention, client);
         intervention = interventionRepository.save(intervention);
@@ -170,26 +193,20 @@ public class InterventionService extends AbstractCrudService {
         }
 
         InterventionRequestDto interventionRequest = (InterventionRequestDto) requestDto;
+        if (interventionRequest.getDatePlanifiee() == null) {
+            throw new IllegalArgumentException("La date planifiée est obligatoire");
+        }
 
-        TypeIntervention typeIntervention = typeInterventionRepository.findById(interventionRequest.getTypeInterventionId())
-                .orElseThrow(() -> new NotFoundException("Type d'intervention non trouvé"));
-        Client client = clientRepository.findById(interventionRequest.getClientId())
-                .orElseThrow(() -> new NotFoundException("Client non trouvé"));
         Technicien technicien = technicienRepository.findById(interventionRequest.getTechnicienId())
                 .orElseThrow(() -> new NotFoundException("Technicien non trouvé"));
         Creneau creneau = creneauRepository.findById(interventionRequest.getCreneauId())
                 .orElseThrow(() -> new NotFoundException("Créneau non trouvé"));
 
-        if (!creneau.getDateFin().isAfter(creneau.getDateDebut())) {
-            throw new IllegalArgumentException("L'heure de fin doit être postérieure à l'heure de début");
-        }
-
-        verifierCompetencesTechnicien(technicien, typeIntervention, interventionRequest.getDatePlanifiee().toLocalDate());
-        verifierChevauchement(technicien, creneau, id);
+        validerCreneau(interventionRequest.getDatePlanifiee(), creneau);
+        verifierCompetencesTechnicien(technicien, intervention.getTypeIntervention(), interventionRequest.getDatePlanifiee());
+        verifierChevauchement(technicien, creneau, id, interventionRequest.getDatePlanifiee());
 
         intervention.setDatePlanifiee(interventionRequest.getDatePlanifiee());
-        intervention.setTypeIntervention(typeIntervention);
-        intervention.setClient(client);
         intervention.setCommentaire(interventionRequest.getCommentaire());
         intervention.setReference(interventionRequest.getReference());
         interventionRepository.save(intervention);
@@ -246,27 +263,33 @@ public class InterventionService extends AbstractCrudService {
         if (statut != null && !STATUTS_VALIDES.contains(statut)) {
             throw new IllegalArgumentException("Statut inconnu : " + statut);
         }
-        LocalDateTime debut = du != null ? du.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
-        LocalDateTime fin = au != null ? au.plusDays(1).atStartOfDay() : LocalDateTime.of(2099, 12, 31, 23, 59);
-        if (debut.isAfter(fin)) {
+        if (du != null && au != null && du.isAfter(au)) {
             throw new IllegalArgumentException("La date de début ne peut pas être postérieure à la date de fin");
         }
         Pageable pageable = PageRequest.of(pageAutorisee(page), tailleAutorisee(taille));
+
         List<Intervention> resultats;
         if (statut != null) {
-            resultats = interventionRepository.findByStatutAndDatePlanifieeBetween(statut, debut, fin);
+            resultats = interventionRepository.findByStatutAndDatePlanifieeBetween(statut, du, au);
         } else {
-            resultats = interventionRepository.findByDatePlanifieeBetween(debut, fin);
+            resultats = interventionRepository.findByDatePlanifieeBetween(du, au);
         }
+
         List<ResponseDto> dtos = resultats.stream().map(this::toDto).toList();
         return new PageImpl<>(dtos, pageable, dtos.size());
+    }
+    public Page<ResponseDto> getInterventions(String statut, LocalDate du, LocalDate au, int page, int taille) {
+        if (statut != null || du != null || au != null) {
+            return getAllFiltre(statut, du, au, page, taille);
+        }
+        return getAll(page, taille);
     }
 
     public List<ResponseDto> getPlanning(Long technicienId, LocalDate du, LocalDate au) {
         technicienRepository.findById(technicienId)
                 .orElseThrow(() -> new NotFoundException("Technicien non trouvé"));
-        LocalDateTime debut = du != null ? du.atStartOfDay() : LocalDate.now().atStartOfDay();
-        LocalDateTime fin = au != null ? au.plusDays(1).atStartOfDay() : debut.plusDays(7);
+        LocalDate debut = du != null ? du : LocalDate.now();
+        LocalDate fin = au != null ? au : debut.plusDays(7);
         if (ChronoUnit.DAYS.between(debut, fin) > MAX_PERIOD_DAYS) {
             throw new IllegalArgumentException("La période ne peut pas dépasser 3 mois");
         }
@@ -296,8 +319,12 @@ public class InterventionService extends AbstractCrudService {
         }
     }
 
-    public void verifierChevauchement(Technicien technicien, Creneau creneau, Long interventionIdAExclure) {
+    public void verifierChevauchement(Technicien technicien, Creneau creneau, Long interventionIdAExclure, LocalDate dateIntervention) {
         List<Intervention> interventionsDuTechnicien = interventionRepository.findByTechnicienId(technicien.getId());
+
+        LocalDateTime debutNouveau = toDateTime(dateIntervention, creneau.getDateDebut());
+        LocalDateTime finNouveau = toDateTime(dateIntervention, creneau.getDateFin());
+
         for (Intervention intervention : interventionsDuTechnicien) {
             if (Objects.equals(intervention.getId(), interventionIdAExclure)) {
                 continue;
@@ -305,9 +332,14 @@ public class InterventionService extends AbstractCrudService {
             if (!"ANNULEE".equals(intervention.getStatut())) {
                 Creneau c = interventionCreneauxRepository.findByInterventionId(intervention.getId())
                         .stream().findFirst().map(InterventionCreneaux::getCreneau).orElse(null);
-                if (c != null && creneau.getDateDebut().isBefore(c.getDateFin()) && creneau.getDateFin().isAfter(c.getDateDebut())) {
-                    throw new IllegalStateException("Chevauchement de créneau avec l'intervention " + intervention.getId()
-                            + " (créneau " + c.getDateDebut() + " - " + c.getDateFin() + ")");
+                if (c != null && c.getDateDebut() != null && c.getDateFin() != null) {
+                    LocalDateTime debutExistant = toDateTime(intervention.getDatePlanifiee(), c.getDateDebut());
+                    LocalDateTime finExistant = toDateTime(intervention.getDatePlanifiee(), c.getDateFin());
+
+                    if (debutNouveau.isBefore(finExistant) && finNouveau.isAfter(debutExistant)) {
+                        throw new IllegalStateException("Chevauchement de créneau avec l'intervention " + intervention.getId()
+                                + " (créneau " + c.getDateDebut() + " - " + c.getDateFin() + ")");
+                    }
                 }
             }
         }
@@ -332,7 +364,7 @@ public class InterventionService extends AbstractCrudService {
     }
 
     @Transactional
-    public Intervention creerInterventionDeReprise(Long interventionId, LocalDateTime nouvelleDatePlanifiee) {
+    public Intervention creerInterventionDeReprise(Long interventionId, LocalDate nouvelleDatePlanifiee) {
         Intervention origine = interventionRepository.findById(interventionId)
                 .orElseThrow(() -> new NotFoundException("Intervention non trouvée"));
 

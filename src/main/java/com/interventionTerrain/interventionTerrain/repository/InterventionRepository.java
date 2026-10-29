@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import com.interventionTerrain.interventionTerrain.entity.Intervention;
 
@@ -18,29 +19,29 @@ public interface InterventionRepository extends JpaRepository<Intervention, Long
     List<Intervention> findByStatut(@Param("statut") String statut);
 
     @Query("SELECT i FROM Intervention i WHERE i.datePlanifiee BETWEEN :debut AND :fin ORDER BY i.datePlanifiee ASC")
-    List<Intervention> findByDatePlanifieeBetween(@Param("debut") java.time.LocalDateTime debut,
-                                                  @Param("fin") java.time.LocalDateTime fin);
+    List<Intervention> findByDatePlanifieeBetween(@Param("debut") LocalDate debut,
+                                                @Param("fin") LocalDate fin);
 
     @Query("SELECT i FROM Intervention i WHERE i.statut = :statut AND i.datePlanifiee BETWEEN :debut AND :fin ORDER BY i.datePlanifiee ASC")
     List<Intervention> findByStatutAndDatePlanifieeBetween(@Param("statut") String statut,
-                                                           @Param("debut") java.time.LocalDateTime debut,
-                                                           @Param("fin") java.time.LocalDateTime fin);
+                                                         @Param("debut") LocalDate debut,
+                                                         @Param("fin") LocalDate fin);
 
     @Query("SELECT it.intervention FROM InterventionTechnicien it WHERE it.technicien.id = :technicienId")
     List<Intervention> findByTechnicienId(@Param("technicienId") Long technicienId);
 
     @Query("SELECT it.intervention FROM InterventionTechnicien it WHERE it.technicien.id = :technicienId " +
-           "AND it.intervention.datePlanifiee BETWEEN :debut AND :fin ORDER BY it.intervention.datePlanifiee ASC")
+            "AND it.intervention.datePlanifiee BETWEEN :debut AND :fin ORDER BY it.intervention.datePlanifiee ASC")
     List<Intervention> findByTechnicienIdAndDatePlanifieeBetween(@Param("technicienId") Long technicienId,
-                                                                  @Param("debut") java.time.LocalDateTime debut,
-                                                                  @Param("fin") java.time.LocalDateTime fin);
+                                                                @Param("debut") LocalDate debut,
+                                                                @Param("fin") LocalDate fin);
 
     @Query("SELECT it.intervention FROM InterventionTechnicien it WHERE it.technicien.id = :technicienId " +
-           "AND it.intervention.statut <> 'ANNULEE' " +
-           "AND it.intervention.datePlanifiee BETWEEN :debut AND :fin ORDER BY it.intervention.datePlanifiee ASC")
+            "AND it.intervention.statut <> 'ANNULEE' " +
+            "AND it.intervention.datePlanifiee BETWEEN :debut AND :fin ORDER BY it.intervention.datePlanifiee ASC")
     List<Intervention> findByTechnicienIdAndDatePlanifieeBetweenNonAnnulee(@Param("technicienId") Long technicienId,
-                                                                            @Param("debut") java.time.LocalDateTime debut,
-                                                                            @Param("fin") java.time.LocalDateTime fin);
+                                                                          @Param("debut") LocalDate debut,
+                                                                          @Param("fin") LocalDate fin);
 
     boolean existsByClientId(Long clientId);
 

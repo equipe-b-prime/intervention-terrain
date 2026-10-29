@@ -6,7 +6,7 @@ import com.interventionTerrain.interventionTerrain.dto.TechnicienResponseDto;
 import com.interventionTerrain.interventionTerrain.dto.TypeInterventionResponseDto;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /**
  * Réponse contenant les données d'une intervention, avec le type d'intervention et le client associés.
@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class InterventionResponseDto implements ResponseDto {
     private Long id;
-    private LocalDateTime datePlanifiee;
+    private LocalDate datePlanifiee;
     private String statut;
     private String commentaire;
     private String reference;
