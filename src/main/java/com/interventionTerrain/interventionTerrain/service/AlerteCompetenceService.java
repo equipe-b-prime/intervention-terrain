@@ -1,26 +1,22 @@
 package com.interventionTerrain.interventionTerrain.service;
 
 import com.interventionTerrain.interventionTerrain.entity.AlerteCompetence;
-import com.interventionTerrain.interventionTerrain.entity.Competence;
 import com.interventionTerrain.interventionTerrain.entity.TechnicienCompetence;
 import com.interventionTerrain.interventionTerrain.exception.ParametresInvalidesException;
 import com.interventionTerrain.interventionTerrain.repository.AlerteCompetenceRepository;
 import com.interventionTerrain.interventionTerrain.repository.TechnicienCompetenceRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AlerteCompetenceService {
-
-    @PersistenceContext
-    private EntityManager entityManager;
 
     private final TechnicienCompetenceRepository technicienCompetenceRepository;
     private final AlerteCompetenceRepository alerteCompetenceRepository;
@@ -32,48 +28,42 @@ public class AlerteCompetenceService {
     }
 
     /**
-     * Tâche planifiée exécutée chaque nuit à minuit.
      * Règle F16 : signale toute compétence expirant dans les 30 jours.
-     * Traçabilité : une compétence déjà signalée (est_traitee = TRUE) n'est pas
-     * signalée deux fois grâce à la vérification en base avant insertion.
      */
-    @Scheduled(fixedDelayString = "86400000") // 24h en millisecondes
+    @Scheduled(cron = "0 0 0 * * ?")
     @Transactional
     public void genererAlertesExpiration() {
         LocalDate aujourdhui = LocalDate.now();
         LocalDate finFenetre = aujourdhui.plusDays(30);
 
-        // 1. Récupérer toutes les techno-competences ayant une dateExpiration dans la fenêtre
-        List<TechnicienCompetence> technoCompetences = technicienCompetenceRepository.findAll().stream()
-                .filter(tc -> tc.getDateExpiration() != null)
-                .filter(tc -> !tc.getDateExpiration().isBefore(aujourdhui))
-                .filter(tc -> tc.getDateExpiration().isBefore(finFenetre))
-                .toList();
+        // Recherche optimisée directement en base via le repository
+        List<TechnicienCompetence> technoCompetences =
+                technicienCompetenceRepository.findByDateExpirationBetween(aujourdhui, finFenetre);
 
-        // 2. Pour chacune, vérifier si une alerte non traitée existe déjà (traçabilité F16)
+        log.info("Nombre de compétences expirant sous 30 jours trouvées : {}", technoCompetences.size());
+
         for (TechnicienCompetence tc : technoCompetences) {
-            // Requête JPQL : vérifie s'il existe déjà une alerte non traitée pour cette techno-competence
-            Long count = entityManager.createQuery(
-                            "SELECT COUNT(a) FROM AlerteCompetence a "
-                            + "WHERE a.technicienCompetence.id = :tcId AND a.estTraitee = FALSE", Long.class)
-                    .setParameter("tcId", tc.getId())
-                    .getSingleResult();
+            // Vérification de l'existence d'une alerte non traitée via Spring Data JPA
+            boolean alerteExiste = alerteCompetenceRepository
+                    .existsByTechnicienCompetenceIdAndEstTraiteeFalse(tc.getId());
 
-            if (count == 0L) {
-                // Pas d'alerte existante → on en crée une nouvelle
+            if (!alerteExiste) {
                 AlerteCompetence alerte = AlerteCompetence.builder()
                         .technicienCompetence(tc)
                         .dateSignalement(LocalDateTime.now())
                         .estTraitee(false)
                         .build();
                 alerteCompetenceRepository.save(alerte);
+                log.info("Alerte créée avec succès pour la compétence ID {} du technicien ID {}",
+                        tc.getId(), tc.getTechnicien() != null ? tc.getTechnicien().getId() : "N/A");
+            } else {
+                log.info("Une alerte non traitée existe déjà pour la compétence ID {}", tc.getId());
             }
         }
     }
 
     /**
-     * Marque une alerte comme traitée (responsable a pris en compte).
-     * @param alerteId l'identifiant de l'alerte
+     * Marque une alerte comme traitée.
      */
     @Transactional
     public void marquerCommeTraitee(Long alerteId) {
@@ -86,30 +76,15 @@ public class AlerteCompetenceService {
 
     /**
      * Récupère les alertes actives (non traitées) par agence.
-     * @param agenceId l'identifiant de l'agence
-     * @return liste des alertes actives
      */
     public List<AlerteCompetence> findAlertesNonTraiteesParAgence(Long agenceId) {
-        return entityManager.createQuery(
-                        "SELECT a FROM AlerteCompetence a "
-                        + "JOIN a.technicienCompetence tc "
-                        + "JOIN tc.technicien t "
-                        + "WHERE a.estTraitee = FALSE AND t.equipe.agence.id = :agenceId", AlerteCompetence.class)
-                .setParameter("agenceId", agenceId)
-                .getResultList();
+        return alerteCompetenceRepository.findByAgenceNonTraitee(agenceId);
     }
 
     /**
      * Récupère les alertes actives pour une compétence donnée.
-     * @param competenceId l'identifiant de la compétence
-     * @return liste des alertes
      */
     public List<AlerteCompetence> findAlertesNonTraiteesParCompetence(Long competenceId) {
-        return entityManager.createQuery(
-                        "SELECT a FROM AlerteCompetence a "
-                        + "JOIN a.technicienCompetence tc "
-                        + "WHERE a.estTraitee = FALSE AND tc.competence.id = :competenceId", AlerteCompetence.class)
-                .setParameter("competenceId", competenceId)
-                .getResultList();
+        return alerteCompetenceRepository.findByCompetenceNonTraitee(competenceId);
     }
 }

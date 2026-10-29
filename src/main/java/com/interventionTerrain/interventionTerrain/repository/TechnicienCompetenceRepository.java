@@ -13,6 +13,7 @@ import com.interventionTerrain.interventionTerrain.entity.TechnicienCompetence;
 public interface TechnicienCompetenceRepository extends JpaRepository<TechnicienCompetence, Long> {
 
     List<TechnicienCompetence> findByTechnicienId(Long technicienId);
+    List<TechnicienCompetence> findByDateExpirationBetween(LocalDate debut, LocalDate fin);
 
     @Query("SELECT tc.technicien.id, COUNT(tc) FROM TechnicienCompetence tc " +
            "WHERE tc.technicien.equipe.agence.id = :agenceId " +
