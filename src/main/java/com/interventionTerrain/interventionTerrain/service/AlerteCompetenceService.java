@@ -43,7 +43,6 @@ public class AlerteCompetenceService {
         log.info("Nombre de compétences expirant sous 30 jours trouvées : {}", technoCompetences.size());
 
         for (TechnicienCompetence tc : technoCompetences) {
-            // Vérification de l'existence d'une alerte non traitée via Spring Data JPA
             boolean alerteExiste = alerteCompetenceRepository
                     .existsByTechnicienCompetenceIdAndEstTraiteeFalse(tc.getId());
 
