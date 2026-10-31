@@ -1,4 +1,7 @@
-HELP.md
+# Ignorer tous les fichiers .md sauf le README.md
+*.md
+!README.md
+
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -31,3 +34,13 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Test documentation & scripts ###
+test-docs/
+tests/
+*.sh
+*.log
+*.tmp
+*.csv
+.DS_Store
+Thumbs.db
